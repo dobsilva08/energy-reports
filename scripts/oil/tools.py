@@ -1,65 +1,78 @@
-# scripts/oil/tools.py
 import os
 import json
 from datetime import datetime, timezone, timedelta
+import requests
 
-BRT_OFFSET = timedelta(hours=-3)
+BRT = timezone(timedelta(hours=-3))
 
-def ensure_dir_for_file(path: str):
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
 
-def title_counter(counter_path: str, key: str = 'diario_oil') -> int:
-    ensure_dir_for_file(counter_path)
-    try:
-        data = json.load(open(counter_path, 'r', encoding='utf-8')) if os.path.exists(counter_path) else {}
-    except Exception:
-        data = {}
-    data[key] = int(data.get(key, 0)) + 1
-    json.dump(data, open(counter_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
-    return data[key]
+def ensure_dir(path: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
 
-def sent_guard(path: str) -> bool:
+
+def today_brt():
+    return datetime.now(BRT).strftime("%Y-%m-%d")
+
+
+def sentinel_trigger(path: str) -> bool:
     """
-    If the sentinel file already indicates today (BRT), return True (already sent).
-    Otherwise update it and return False.
+    Retorna True se já enviou hoje.
+    Se não enviou, marca como enviado.
     """
-    ensure_dir_for_file(path)
-    today_tag = (datetime.now(timezone.utc) + BRT_OFFSET).strftime('%Y-%m-%d')
+    ensure_dir(path)
+
+    tag = today_brt()
+
     if os.path.exists(path):
         try:
-            data = json.load(open(path, 'r', encoding='utf-8'))
-            if data.get('last_sent') == today_tag:
+            data = json.load(open(path, "r"))
+            if data.get("last_sent") == tag:
                 return True
-        except Exception:
+        except:
             pass
-    json.dump({'last_sent': today_tag}, open(path, 'w', encoding='utf-8'))
+
+    json.dump({"last_sent": tag}, open(path, "w"))
     return False
 
-def send_to_telegram(text: str, preview: bool = False) -> None:
-    """
-    Sends message to TELEGRAM_CHAT_ID_ENERGY unless preview and TELEGRAM_CHAT_ID_TEST exists.
-    """
-    try:
-        import requests
-    except Exception:
-        print("requests not available; skipping telegram send.")
+
+def increment_counter(path: str, key: str) -> int:
+    ensure_dir(path)
+    if os.path.exists(path):
+        data = json.load(open(path, "r"))
+    else:
+        data = {}
+
+    data[key] = data.get(key, 0) + 1
+
+    json.dump(data, open(path, "w"), indent=2)
+    return data[key]
+
+
+def send_telegram(msg: str, preview=False):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_main = os.getenv("TELEGRAM_CHAT_ID_ENERGY")
+    chat_test = os.getenv("TELEGRAM_CHAT_ID_TEST", "")
+    thread = os.getenv("TELEGRAM_MESSAGE_THREAD_ID", "")
+
+    if not token or not chat_main:
+        print("Telegram não configurado.")
         return
 
-    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
-    chat_main = os.environ.get('TELEGRAM_CHAT_ID_ENERGY', '').strip()
-    chat_test = os.environ.get('TELEGRAM_CHAT_ID_TEST', '').strip()
-    chat = chat_test if (preview and chat_test) else chat_main
-    if not bot_token or not chat:
-        print("Telegram not configured (missing token or chat). Skipping send.")
-        return
+    chat_id = chat_test if preview and chat_test else chat_main
 
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": msg,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    if thread:
+        payload["message_thread_id"] = thread
+
     try:
         r = requests.post(url, json=payload, timeout=30)
         r.raise_for_status()
-        print("Telegram: mensagem enviada.")
+        print("Mensagem enviada ao Telegram.")
     except Exception as e:
-        print("Falha no envio ao Telegram:", e)
+        print("Erro ao enviar Telegram:", e)
