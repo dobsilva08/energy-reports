@@ -1,77 +1,122 @@
-# providers/llm_client.py
 import os
-import json
 import requests
-from typing import Optional
+
 
 class LLMClient:
     """
-    LLM client multi-provider (fallback):
-    - Prioriza PIAPI (PIAPI_API_KEY)
-    - Depois GROQ (GROQ_API_KEY)
-    - Depois DEEPSEEK (DEEPSEEK_API_KEY)
-    - Depois OPENAI (OPENAI_API_KEY) if present
-
-    generate(...) returns a string result.
+    Cliente LLM com fallback automático:
+    -> PIAPI (padrão)
+    -> Groq
+    -> OpenAI
+    -> DeepSeek
     """
 
-    def __init__(self, provider: Optional[str] = None):
-        # provider hint may be 'piapi','groq','deepseek','openai'
-        self.provider_hint = (provider or "").lower() if provider else None
+    def __init__(self, provider: str | None = None):
+        self.order = os.getenv("LLM_FALLBACK_ORDER", "piapi,groq,openai,deepseek").split(",")
+        self.default_provider = provider or os.getenv("LLM_PROVIDER", "piapi")
+        self.active_provider = None
 
-        # read env keys
-        self.piapi_key = os.environ.get("PIAPI_API_KEY", "").strip()
-        self.groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-        self.deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-        self.openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    # ------------------------
+    # Chamadas de providers
+    # ------------------------
 
-        # decide active provider
-        self.active_provider = self._select_provider()
-        if not self.active_provider:
-            raise RuntimeError(
-                "Nenhuma chave encontrada para provedores. Defina ao menos PIAPI_API_KEY (recomendado) ou as demais."
-            )
+    def _piapi(self, system_prompt, user_prompt, temperature, max_tokens):
+        api_key = os.getenv("PIAPI_API_KEY")
+        if not api_key:
+            raise RuntimeError("PIAPI_API_KEY faltando")
+        url = "https://api.piapi.ai/v1/chat/completions"
+        payload = {
+            "model": os.getenv("PIAPI_MODEL", "gpt-4o-mini"),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        r = requests.post(url, json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
 
-    def _select_provider(self) -> Optional[str]:
-        # if user hints provider and key exists, use it
-        hint = self.provider_hint
-        if hint == "piapi" and self.piapi_key:
-            return "piapi"
-        if hint == "groq" and self.groq_key:
-            return "groq"
-        if hint == "deepseek" and self.deepseek_key:
-            return "deepseek"
-        if hint == "openai" and self.openai_key:
-            return "openai"
+    def _groq(self, system_prompt, user_prompt, temperature, max_tokens):
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY faltando")
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        payload = {
+            "model": os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile"),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        r = requests.post(url, json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
 
-        # fallback order explicit
-        if self.piapi_key:
-            return "piapi"
-        if self.groq_key:
-            return "groq"
-        if self.openai_key:
-            return "openai"
-        if self.deepseek_key:
-            return "deepseek"
-        return None
+    def _openai(self, system_prompt, user_prompt, temperature, max_tokens):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY faltando")
+        url = "https://api.openai.com/v1/chat/completions"
+        payload = {
+            "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        r = requests.post(url, json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
 
-    def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.4, max_tokens: int = 1000) -> str:
-        """
-        Minimal implementation. Replace with real SDK calls for production.
-        Returns text string.
-        """
+    def _deepseek(self, system_prompt, user_prompt, temperature, max_tokens):
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise RuntimeError("DEEPSEEK_API_KEY faltando")
+        url = "https://api.deepseek.com/v1/chat/completions"
+        payload = {
+            "model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        r = requests.post(url, json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
 
-        # Basic payload for any provider; adapt per provider as needed.
-        if self.active_provider == "piapi":
-            # Placeholder: if you have a real PIAPI endpoint/SDK, replace this block.
-            # We simply return a composed message to avoid failing.
-            return f"(PIAPI placeholder) Provider: PIAPI. System: {system_prompt[:200]} ... User prompt preview: {user_prompt[:400]}"
-        if self.active_provider == "groq":
-            return f"(GROQ placeholder) Provider: GROQ. System: {system_prompt[:200]} ... User prompt preview: {user_prompt[:400]}"
-        if self.active_provider == "openai":
-            return f"(OPENAI placeholder) Provider: OpenAI. System: {system_prompt[:200]} ... User prompt preview: {user_prompt[:400]}"
-        if self.active_provider == "deepseek":
-            return f"(DEEPSEEK placeholder) Provider: DeepSeek. System: {system_prompt[:200]} ... User prompt preview: {user_prompt[:400]}"
+    # ------------------------
+    # Lógica de fallback
+    # ------------------------
 
-        # fallback
-        return "(LLM placeholder) Nenhum provider ativo corretamente configurado."
+    def generate(self, system_prompt, user_prompt, temperature=0.4, max_tokens=1800):
+        last_error = None
+
+        for provider in self.order:
+            try:
+                self.active_provider = provider
+
+                if provider == "piapi":
+                    return self._piapi(system_prompt, user_prompt, temperature, max_tokens)
+
+                if provider == "groq":
+                    return self._groq(system_prompt, user_prompt, temperature, max_tokens)
+
+                if provider == "openai":
+                    return self._openai(system_prompt, user_prompt, temperature, max_tokens)
+
+                if provider == "deepseek":
+                    return self._deepseek(system_prompt, user_prompt, temperature, max_tokens)
+
+            except Exception as e:
+                last_error = e
+                continue
+
+        raise RuntimeError(f"Falha em todos os providers. Último erro: {last_error}")
