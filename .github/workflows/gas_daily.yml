@@ -1,0 +1,127 @@
+name: Gas — Relatório Diário (PIAPI + Fallback)
+
+on:
+  schedule:
+    # 09:00 UTC = 06:00 BRT
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      preview:
+        type: boolean
+        description: "Enviar para CHAT DE TESTE (se TELEGRAM_CHAT_ID_TEST estiver definido)"
+        default: false
+
+permissions:
+  contents: write   # necessário para salvar o sentinel
+
+concurrency:
+  group: energy-gas-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    env:
+      # ===== LLM (padrão: PIAPI) =====
+      PIAPI_API_KEY: ${{ secrets.PIAPI_API_KEY }}
+      PIAPI_MODEL: ${{ secrets.PIAPI_MODEL || 'gpt-4o-mini' }}
+
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'llama-3.1-70b-versatile' }}
+
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL || 'gpt-4o-mini' }}
+
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL || 'deepseek-chat' }}
+
+      LLM_PROVIDER: piapi
+      LLM_FALLBACK_ORDER: piapi,groq,openai,deepseek
+
+      # ===== Dados auxiliares =====
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      NASDAQ_DATA_LINK_API_KEY: ${{ secrets.NASDAQ_DATA_LINK_API_KEY }}
+
+      # ===== Telegram =====
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
+      TELEGRAM_CHAT_ID_TEST: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+      TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+
+      # garantir imports locais
+      PYTHONPATH: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests python-dateutil; fi
+
+      - name: (Opcional) Verificar PIAPI
+        if: ${{ env.PIAPI_API_KEY != '' }}
+        continue-on-error: true
+        run: |
+          echo "PIAPI key presente — verificação opcional"
+
+      - name: Rodar Gas Diário (PREVIEW)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.preview == true }}
+        run: |
+          python scripts/gas/gas_daily.py --send-telegram --preview
+
+      - name: Rodar Gas Diário
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.preview != true }}
+        run: |
+          python scripts/gas/gas_daily.py --send-telegram
+
+      # ========== Commit sentinel (gas_daily.sent) ==========
+      - name: Commit sentinel (gas_daily.sent)
+        if: ${{ success() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p data/sentinels
+          TODAY_BRT=$(python - <<'PY'
+from datetime import datetime, timezone, timedelta
+now_utc = datetime.now(timezone.utc)
+print((now_utc + timedelta(hours=-3)).strftime('%Y-%m-%d'))
+PY
+)
+          echo "{\"last_sent\": \"${TODAY_BRT}\"}" > data/sentinels/gas_daily.sent
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/sentinels/gas_daily.sent || true
+          git commit -m "chore: update gas_daily sentinel ${TODAY_BRT}" || echo "no changes to commit"
+          git push origin HEAD:$GITHUB_REF || echo "push failed (protected branch)"
+
+          # fallback persist via Contents API
+          python - <<'PY'
+import os,base64,requests,json
+repo=os.environ['GITHUB_REPOSITORY']
+token=os.environ['GITHUB_TOKEN']
+path='data/sentinels/gas_daily.sent'
+content=open(path,'rb').read()
+b64=base64.b64encode(content).decode()
+url=f"https://api.github.com/repos/{repo}/contents/{path}"
+h={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json'}
+r=requests.get(url,headers=h)
+payload={'message':f'update {path}','content':b64}
+if r.status_code==200:
+    payload['sha']=r.json().get('sha')
+resp=requests.put(url,headers=h,json=payload,timeout=30)
+print('PUT',resp.status_code)
+print(resp.text)
+PY
