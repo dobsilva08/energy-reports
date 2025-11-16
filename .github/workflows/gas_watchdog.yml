@@ -1,0 +1,81 @@
+name: Watchdog — Gas — 06:30 BRT (Backup)
+
+on:
+  schedule:
+    # 09:30 UTC = 06:30 BRT
+    - cron: "30 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: energy-gas-watchdog
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    env:
+      # keys (somente leitura necessárias)
+      PIAPI_API_KEY: ${{ secrets.PIAPI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
+      TELEGRAM_CHAT_ID_TEST: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+      TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+
+      # garantir imports locais
+      PYTHONPATH: ${{ github.workspace }}
+
+      # tempo de polling do check_main_ran (em segundos)
+      CHECK_MAIN_MAX_WAIT: 90
+      CHECK_MAIN_INTERVAL: 10
+
+      # aponta o checker para o sentinel do gas
+      SENTINEL_PATH: data/sentinels/gas_daily.sent
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests python-dateutil; fi
+
+      - name: Check main workflow (há envio hoje?) (robusto)
+        id: check_main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTINEL_PATH: data/sentinels/gas_daily.sent
+        run: |
+          python scripts/tools/check_main_ran.py
+
+      - name: Rodar Watchdog (executa se não houver envio principal hoje)
+        if: ${{ steps.check_main.outcome == 'failure' || steps.check_main.conclusion == 'failure' }}
+        run: |
+          echo "Nenhum envio bem-sucedido do workflow principal detectado hoje (BRT). Rodando gas_daily.py (watchdog)..."
+          if [ -n "${{ env.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ env.TELEGRAM_CHAT_ID_ENERGY }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ env.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{\"chat_id\": \"${{ env.TELEGRAM_CHAT_ID_ENERGY }}\", \"text\": \"Watchdog GAS: executando backup de envio (06:30 BRT)\", \"parse_mode\": \"HTML\"}" || true
+          fi
+          python scripts/gas/gas_daily.py --send-telegram
+
+      - name: No-op quando já enviado hoje
+        if: ${{ steps.check_main.outcome == 'success' }}
+        run: |
+          echo "Envio principal detectado hoje. Watchdog não executa."
