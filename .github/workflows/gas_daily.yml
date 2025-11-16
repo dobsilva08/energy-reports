@@ -2,20 +2,16 @@ name: Gas — Relatório Diário (PIAPI + Fallback)
 
 on:
   schedule:
-    # 09:00 UTC = 06:00 BRT
-    - cron: "0 9 * * *"
+    - cron: "0 9 * * *"   # 06:00 BRT
   workflow_dispatch:
     inputs:
       preview:
         type: boolean
-        description: "Enviar para CHAT DE TESTE (se TELEGRAM_CHAT_ID_TEST estiver definido)"
         default: false
-
-permissions:
-  contents: write
+        description: "Enviar para TESTE"
 
 concurrency:
-  group: energy-gas-daily
+  group: gas-daily
   cancel-in-progress: false
 
 jobs:
@@ -24,10 +20,18 @@ jobs:
 
     env:
       PIAPI_API_KEY: ${{ secrets.PIAPI_API_KEY }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      PIAPI_MODEL: gpt-4o-mini
 
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: llama-3.1-70b-versatile
+
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-4o-mini
+
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_MODEL: deepseek-chat
+
+      # Data providers
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
       ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -37,6 +41,9 @@ jobs:
       TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
       TELEGRAM_CHAT_ID_TEST: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
       TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+
+      LLM_PROVIDER: piapi
+      LLM_FALLBACK_ORDER: piapi,groq,openai,deepseek
 
       PYTHONPATH: ${{ github.workspace }}
 
@@ -57,51 +64,9 @@ jobs:
       - name: Rodar Gas Diário (PREVIEW)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.preview == true }}
         run: |
-          python scripts/gas/gas_daily.py --send-telegram --preview
+          python scripts/gas/gas_daily.py --preview --send-telegram
 
       - name: Rodar Gas Diário
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.preview != true }}
         run: |
           python scripts/gas/gas_daily.py --send-telegram
-
-      - name: Commit sentinel (gas_daily.sent)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          mkdir -p data/sentinels
-          TODAY_BRT=$(python -c "from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)+timedelta(hours=-3)).strftime('%Y-%m-%d'))")
-          echo "{\"last_sent\": \"${TODAY_BRT}\"}" > data/sentinels/gas_daily.sent
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/sentinels/gas_daily.sent || true
-          git commit -m "chore: update gas_daily.sent ${TODAY_BRT}" || echo "no changes to commit"
-          git push origin HEAD:${GITHUB_REF} || echo "push failed (protected branch)"
-
-          python - <<'PY'
-import os, base64, requests, json
-
-repo = os.environ.get("GITHUB_REPOSITORY")
-token = os.environ.get("GITHUB_TOKEN")
-path = "data/sentinels/gas_daily.sent"
-
-if not repo or not token:
-    print("Missing repo/token — skipping fallback")
-    raise SystemExit(0)
-
-with open(path, "rb") as f:
-    content_b64 = base64.b64encode(f.read()).decode()
-
-url = f"https://api.github.com/repos/{repo}/contents/{path}"
-headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-
-r = requests.get(url, headers=headers)
-payload = {"message": f"update {path}", "content": content_b64}
-
-if r.status_code == 200:
-    payload["sha"] = r.json().get("sha")
-
-resp = requests.put(url, headers=headers, json=payload)
-print("Fallback PUT:", resp.status_code, resp.text)
-PY
