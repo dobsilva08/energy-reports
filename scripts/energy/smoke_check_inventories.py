@@ -14,19 +14,28 @@ import pandas as pd
 
 
 def check(path: str) -> None:
+    print(f"[SMOKE] Checking {path}")
     df = pd.read_csv(path)
     if df is None or len(df) == 0:
         raise Exception(f"No data in {path}")
 
     if "date" in df.columns:
+        # Converte para datetime; algumas datas podem vir com timezone
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
         latest = df["date"].max()
         if pd.isna(latest):
             raise Exception(f"No valid date in {path}")
 
-        cutoff = pd.Timestamp.utcnow() - pd.Timedelta(days=45)
+        # Normaliza: remove timezone se existir (vira tz-naive)
+        if hasattr(latest, "tzinfo") and latest.tzinfo is not None:
+            latest = latest.tz_convert(None)
+
+        # cutoff também tz-naive (UTC agora - 45 dias)
+        cutoff = pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=45)
+
         if latest < cutoff:
-            raise Exception(f"Latest date in {path} is too old: {latest}")
+            raise Exception(f"Latest date in {path} is too old: {latest} (cutoff {cutoff})")
 
 
 if __name__ == "__main__":
