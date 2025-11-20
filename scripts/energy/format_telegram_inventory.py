@@ -1,33 +1,45 @@
 #!/usr/bin/env python3
-"""
-Formata 3 mensagens Telegram (uma por ativo) a partir dos CSVs:
- - crude
- - products
- - gas
-"""
-
 import argparse
 import pandas as pd
 from datetime import datetime
 
 
-# Mapeamento manual dos nomes oficiais da EIA (fallback)
+# Nome oficial das séries (fallback FINAL garantido)
 SERIES_NAMES = {
     "PET.WCESTUS1.W": "Weekly U.S. Ending Stocks of Crude Oil (Excluding SPR)",
-    "PET.WTTSTUS1.W": "Weekly U.S. Total Stocks of Crude Oil and Petroleum Products",
-    "NG.NW2_EPG0_SWO_R48_BCF.W": "Working Gas in Underground Storage — Lower 48 (Bcf)",
+    "PET.WTTSTUS1.W": "Weekly U.S. Total Stocks of Crude Oil & Petroleum Products",
+    "NG.NW2_EPG0_SWO_R48_BCF.W": "Working Gas in Underground Storage — Lower 48 States",
 }
 
 
-def resolve_series_name(series_id, existing_label):
-    """
-    Usa o nome da EIA se vier pelo CSV; senão, aplica fallback manual.
-    """
-    if isinstance(existing_label, str) and existing_label.strip() not in ("", "nan", "None"):
-        return existing_label
+def clean_label(label):
+    """Converte nan/None/'nan'/'None'/'' para None."""
+    if label is None:
+        return None
+    if isinstance(label, float) and pd.isna(label):
+        return None
+    if isinstance(label, str):
+        l = label.strip().lower()
+        if l in ("", "nan", "none", "null"):
+            return None
+    return label
 
-    # fallback inteligente
-    return SERIES_NAMES.get(series_id, f"Série {series_id}")
+
+def resolve_series_name(series_id, raw_label):
+    """
+    Retorna:
+    1) label vindo da API (se existir)
+    2) fallback oficial do nosso dicionário
+    3) fallback genérico "Série {id}"
+    """
+    cleaned = clean_label(raw_label)
+    if cleaned:
+        return cleaned
+
+    if series_id in SERIES_NAMES:
+        return SERIES_NAMES[series_id]
+
+    return f"Série {series_id}"
 
 
 def latest_stats(df: pd.DataFrame, value_col: str = "value"):
@@ -38,9 +50,9 @@ def latest_stats(df: pd.DataFrame, value_col: str = "value"):
     latest = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else None
 
-    # resolve nome com fallback
-    s_id = latest.get("series_id")
-    s_label = resolve_series_name(s_id, latest.get("label"))
+    series_id = latest.get("series_id")
+    raw_label = latest.get("label")
+    series_label = resolve_series_name(series_id, raw_label)
 
     date_latest = pd.to_datetime(latest["date"]).date()
     v_latest = float(latest[value_col]) if pd.notna(latest[value_col]) else None
@@ -58,8 +70,8 @@ def latest_stats(df: pd.DataFrame, value_col: str = "value"):
         "value": v_latest,
         "delta": delta,
         "pct": pct,
-        "label": s_label,
-        "series_id": s_id,
+        "label": series_label,
+        "series_id": series_id,
     }
 
 
@@ -95,16 +107,16 @@ def main():
     df_products = pd.read_csv(args.products)
     df_gas = pd.read_csv(args.gas)
 
-    # garantir datetime
+    # Garantir datetime
     for df in (df_crude, df_products, df_gas):
         if "date" in df.columns:
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    crude_stats = latest_stats(df_crude, "value")
-    products_stats = latest_stats(df_products, "value")
-    gas_stats = latest_stats(df_gas, "storage_bcf")
+    crude_stats = latest_stats(df_crude)
+    products_stats = latest_stats(df_products)
+    gas_stats = latest_stats(df_gas, value_col="storage_bcf")
 
-    # mensagens
+    # CRUDE
     msg_crude = (
         f"📦 *ENERGY — Petroleum (Crude) Weekly*\n\n"
         f"🔖 *Série:* {crude_stats['label']} ({crude_stats['series_id']})\n"
@@ -115,6 +127,7 @@ def main():
         f"🔗 Dados: local\n"
     )
 
+    # PRODUCTS
     msg_products = (
         f"🛢️ *ENERGY — Petroleum (Crude + Products) Weekly*\n\n"
         f"🔖 *Série:* {products_stats['label']} ({products_stats['series_id']})\n"
@@ -125,6 +138,7 @@ def main():
         f"🔗 Dados: local\n"
     )
 
+    # GAS
     msg_gas = (
         f"⛽ *ENERGY — Gas Storage Weekly*\n\n"
         f"🔖 *Série:* {gas_stats['label']} ({gas_stats['series_id']})\n"
@@ -135,7 +149,6 @@ def main():
         f"🔗 Dados: local\n"
     )
 
-    # grava
     with open(args.out_crude, "w", encoding="utf-8") as f:
         f.write(msg_crude)
     with open(args.out_products, "w", encoding="utf-8") as f:
