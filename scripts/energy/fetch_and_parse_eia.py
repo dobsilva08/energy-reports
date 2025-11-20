@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-Busca múltiplas séries semanais da EIA via API v2 (rota /v2/seriesid)
+Busca múltiplas séries semanais da EIA via API v2 (/v2/seriesid)
 e gera 3 CSVs:
 
  - /tmp/petroleum_crude.csv        -> estoques comerciais de crude
  - /tmp/petroleum_products.csv     -> estoques de crude + produtos
  - /tmp/gas_storage.csv            -> working gas in storage (Bcf)
 
-ENV necessárias (já configuradas como secrets no GitHub):
+ENV necessárias (secrets no GitHub):
  - EIA_API_KEY
  - EIA_PETROLEUM_CRUDE_SERIES_ID      (ex: PET.WCESTUS1.W)
  - EIA_PETROLEUM_PRODUCTS_SERIES_ID   (ex: PET.WTTSTUS1.W)
  - EIA_GAS_STORAGE_SERIES_ID          (ex: NG.NW2_EPG0_SWO_R48_BCF.W)
-
-Obs: usa endpoint de compatibilidade v2:
-  https://api.eia.gov/v2/seriesid/{series_id}?api_key=...
 """
 
 import os
@@ -62,10 +59,8 @@ def fetch_series(series_id: str) -> dict:
         )
         sys.exit(2)
 
-    # ⚠️ IMPORTANTE: usar API v2 /seriesid/{V1_SERIES_ID}
     url = f"https://api.eia.gov/v2/seriesid/{series_id}?api_key={API_KEY}"
 
-    # GitHub mascara secrets automaticamente no log
     print(f"[EIA] Fetching series_id={series_id}", flush=True)
 
     try:
@@ -86,49 +81,27 @@ def fetch_series(series_id: str) -> dict:
     return r.json()
 
 
-def parse_series_to_df(j: dict) -> pd.DataFrame:
+def parse_series_to_df(requested_id: str, j: dict) -> pd.DataFrame:
     """
     Converte o JSON da EIA (API v2 /seriesid) em DataFrame normalizado.
 
-    Estrutura esperada (v2):
-      {
-        "response": {
-          "data": [
-            {
-              "period": "2024-01-05",
-              "value": "123.4",
-              ...
-            },
-            ...
-          ],
-          "series": [
-            {
-              "seriesId": "PET.WCESTUS1.W",
-              "name": "...",
-              ...
-            }
-          ]
-        },
-        "request": {...},
-        "apiVersion": "2.1.0"
-      }
+    Usa SEMPRE o `requested_id` como series_id de fallback,
+    para nunca termos NaN nessa coluna.
     """
-
     resp = j.get("response", {})
     data_list = resp.get("data", [])
     series_meta = resp.get("series", [])
     meta = series_meta[0] if series_meta else {}
 
-    series_id = meta.get("seriesId") or meta.get("series_id")
+    # garante que sempre teremos um series_id string
+    series_id = meta.get("seriesId") or meta.get("series_id") or requested_id
     label = meta.get("name") or meta.get("description") or ""
 
     rows = []
 
     for entry in data_list:
-        # period é o campo padrão de tempo na v2
         date_raw = entry.get("period") or entry.get("date")
 
-        # converter data; API pode retornar "YYYY", "YYYY-MM", "YYYY-MM-DD", etc
         date = None
         if isinstance(date_raw, str):
             for fmt in ("%Y-%m-%d", "%Y-%m", "%Y%m%d", "%Y%m", "%Y"):
@@ -138,17 +111,14 @@ def parse_series_to_df(j: dict) -> pd.DataFrame:
                 except Exception:
                     continue
         if date is None:
-            date = date_raw  # fallback: deixa como string mesmo
+            date = date_raw  # fallback string
 
-        # valor: API v2 costuma retornar em "value" como string
         value_raw = entry.get("value")
 
-        # fallback: se não tiver "value", tenta achar o primeiro numérico
         if value_raw is None:
             for k, v in entry.items():
                 if k in ("period", "date"):
                     continue
-                # tenta interpretar como float
                 try:
                     float(v)
                     value_raw = v
@@ -161,15 +131,14 @@ def parse_series_to_df(j: dict) -> pd.DataFrame:
             try:
                 value = float(value_raw)
             except Exception:
-                # se não der pra converter, deixa como None
                 value = None
 
         rows.append(
             {
                 "date": date,
                 "value": value,
-                "series_id": series_id,
-                "label": label,
+                "series_id": series_id,  # <- NUNCA NaN
+                "label": label,          # pode ficar vazio, o formatter trata
                 "retrieved_at": datetime.utcnow().isoformat(),
             }
         )
@@ -190,17 +159,17 @@ def main() -> None:
 
     # crude
     j_crude = fetch_series(CRUDE_SERIES)
-    df_crude = parse_series_to_df(j_crude)
+    df_crude = parse_series_to_df(CRUDE_SERIES, j_crude)
     save_csv(df_crude, "/tmp/petroleum_crude.csv")
 
     # products
     j_products = fetch_series(PRODUCTS_SERIES)
-    df_products = parse_series_to_df(j_products)
+    df_products = parse_series_to_df(PRODUCTS_SERIES, j_products)
     save_csv(df_products, "/tmp/petroleum_products.csv")
 
     # gas
     j_gas = fetch_series(GAS_SERIES)
-    df_gas = parse_series_to_df(j_gas)
+    df_gas = parse_series_to_df(GAS_SERIES, j_gas)
     if not df_gas.empty:
         df_gas = df_gas.rename(columns={"value": "storage_bcf"})
     save_csv(df_gas, "/tmp/gas_storage.csv")
