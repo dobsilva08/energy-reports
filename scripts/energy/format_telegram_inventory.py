@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
 """
 Formata 3 mensagens Telegram (uma por ativo) a partir dos CSVs:
-
- - crude:      /tmp/petroleum_crude.csv
- - products:   /tmp/petroleum_products.csv
- - gas:        /tmp/gas_storage.csv
-
-Gera 3 arquivos de texto:
-
- - /tmp/telegram_petroleum_crude.txt
- - /tmp/telegram_petroleum_products.txt
- - /tmp/telegram_gas_storage.txt
+ - crude
+ - products
+ - gas
 """
 
 import argparse
-from datetime import datetime
 import pandas as pd
+from datetime import datetime
+
+
+# Mapeamento manual dos nomes oficiais da EIA (fallback)
+SERIES_NAMES = {
+    "PET.WCESTUS1.W": "Weekly U.S. Ending Stocks of Crude Oil (Excluding SPR)",
+    "PET.WTTSTUS1.W": "Weekly U.S. Total Stocks of Crude Oil and Petroleum Products",
+    "NG.NW2_EPG0_SWO_R48_BCF.W": "Working Gas in Underground Storage — Lower 48 (Bcf)",
+}
+
+
+def resolve_series_name(series_id, existing_label):
+    """
+    Usa o nome da EIA se vier pelo CSV; senão, aplica fallback manual.
+    """
+    if isinstance(existing_label, str) and existing_label.strip() not in ("", "nan", "None"):
+        return existing_label
+
+    # fallback inteligente
+    return SERIES_NAMES.get(series_id, f"Série {series_id}")
 
 
 def latest_stats(df: pd.DataFrame, value_col: str = "value"):
@@ -26,24 +38,28 @@ def latest_stats(df: pd.DataFrame, value_col: str = "value"):
     latest = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else None
 
-    date_latest = pd.to_datetime(latest["date"]).date()
-    val_latest = float(latest[value_col]) if pd.notna(latest[value_col]) else None
+    # resolve nome com fallback
+    s_id = latest.get("series_id")
+    s_label = resolve_series_name(s_id, latest.get("label"))
 
-    if prev is not None and pd.notna(prev[value_col]) and val_latest is not None:
-        prev_val = float(prev[value_col])
-        delta = val_latest - prev_val
-        pct = (delta / prev_val) * 100 if prev_val != 0 else 0.0
+    date_latest = pd.to_datetime(latest["date"]).date()
+    v_latest = float(latest[value_col]) if pd.notna(latest[value_col]) else None
+
+    if prev is not None and pd.notna(prev[value_col]) and v_latest is not None:
+        prev_v = float(prev[value_col])
+        delta = v_latest - prev_v
+        pct = (delta / prev_v) * 100 if prev_v != 0 else 0.0
     else:
         delta = 0.0
         pct = 0.0
 
     return {
         "date": date_latest,
-        "value": val_latest,
+        "value": v_latest,
         "delta": delta,
         "pct": pct,
-        "label": latest.get("label", ""),
-        "series_id": latest.get("series_id", ""),
+        "label": s_label,
+        "series_id": s_id,
     }
 
 
@@ -65,76 +81,7 @@ def interpret_gas(storage_bcf, delta_bcf, hist_avg=None) -> str:
     return "Normal"
 
 
-def format_petroleum_msg(stats, dataset_link=None) -> str:
-    if stats is None:
-        return "📦 *ENERGY — Petroleum (Crude)*\n\nSem dados disponíveis."
-
-    date = stats["date"]
-    v = stats["value"]
-    d = stats["delta"]
-    p = stats["pct"]
-    label = stats["label"]
-    sid = stats["series_id"]
-    interp = interpret_petroleum(p)
-
-    return (
-        f"📦 *ENERGY — Petroleum (Crude) Weekly*\n\n"
-        f"🔖 *Série:* {label} ({sid})\n"
-        f"📅 *Data:* {date}\n"
-        f"📈 *Estoque:* {v:,.0f} bbl\n"
-        f"🔁 *Variação WoW:* {d:+,.0f} bbl ({p:+.2f}%)\n\n"
-        f"🔍 *Interpretação rápida:* {interp}\n\n"
-        f"🔗 Dados: {dataset_link or 'local'}\n"
-    )
-
-
-def format_products_msg(stats, dataset_link=None) -> str:
-    if stats is None:
-        return "🛢️ *ENERGY — Petroleum (Crude + Products)*\n\nSem dados disponíveis."
-
-    date = stats["date"]
-    v = stats["value"]
-    d = stats["delta"]
-    p = stats["pct"]
-    label = stats["label"]
-    sid = stats["series_id"]
-    interp = interpret_petroleum(p)
-
-    return (
-        f"🛢️ *ENERGY — Petroleum (Crude + Products) Weekly*\n\n"
-        f"🔖 *Série:* {label} ({sid})\n"
-        f"📅 *Data:* {date}\n"
-        f"📈 *Estoque Total:* {v:,.0f} bbl\n"
-        f"🔁 *Variação WoW:* {d:+,.0f} bbl ({p:+.2f}%)\n\n"
-        f"🔍 *Interpretação rápida:* {interp}\n\n"
-        f"🔗 Dados: {dataset_link or 'local'}\n"
-    )
-
-
-def format_gas_msg(stats, dataset_link=None, hist_avg=None) -> str:
-    if stats is None:
-        return "⛽ *ENERGY — Gas Storage Weekly*\n\nSem dados disponíveis."
-
-    date = stats["date"]
-    v = stats.get("value")
-    d = stats.get("delta")
-    p = stats.get("pct")
-    label = stats.get("label", "")
-    sid = stats.get("series_id", "")
-    interp = interpret_gas(v, d, hist_avg)
-
-    return (
-        f"⛽ *ENERGY — Gas Storage Weekly*\n\n"
-        f"🔖 *Série:* {label} ({sid})\n"
-        f"📅 *Data:* {date}\n"
-        f"📦 *Storage Total:* {v:,.1f} Bcf\n"
-        f"🔁 *Variação WoW:* {d:+,.1f} Bcf ({p:+.2f}%)\n\n"
-        f"🔍 *Interpretação rápida:* {interp}\n\n"
-        f"🔗 Dados: {dataset_link or 'local'}\n"
-    )
-
-
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--crude", required=True)
     parser.add_argument("--products", required=True)
@@ -142,31 +89,53 @@ def main() -> None:
     parser.add_argument("--out-crude", required=True)
     parser.add_argument("--out-products", required=True)
     parser.add_argument("--out-gas", required=True)
-    parser.add_argument("--hist-gas-avg", type=float, default=None)
-    parser.add_argument("--dataset-link", default=None)
     args = parser.parse_args()
 
     df_crude = pd.read_csv(args.crude)
     df_products = pd.read_csv(args.products)
     df_gas = pd.read_csv(args.gas)
 
+    # garantir datetime
     for df in (df_crude, df_products, df_gas):
         if "date" in df.columns:
-            try:
-                df["date"] = pd.to_datetime(df["date"])
-            except Exception:
-                pass
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    s_crude = latest_stats(df_crude, "value") if len(df_crude) > 0 else None
-    s_products = latest_stats(df_products, "value") if len(df_products) > 0 else None
+    crude_stats = latest_stats(df_crude, "value")
+    products_stats = latest_stats(df_products, "value")
+    gas_stats = latest_stats(df_gas, "storage_bcf")
 
-    gas_col = "storage_bcf" if "storage_bcf" in df_gas.columns else "value"
-    s_gas = latest_stats(df_gas, gas_col) if len(df_gas) > 0 else None
+    # mensagens
+    msg_crude = (
+        f"📦 *ENERGY — Petroleum (Crude) Weekly*\n\n"
+        f"🔖 *Série:* {crude_stats['label']} ({crude_stats['series_id']})\n"
+        f"📅 *Data:* {crude_stats['date']}\n"
+        f"📈 *Estoque:* {crude_stats['value']:,.0f} bbl\n"
+        f"🔁 *Variação WoW:* {crude_stats['delta']:+,.0f} bbl ({crude_stats['pct']:+.2f}%)\n\n"
+        f"🔍 *Interpretação rápida:* {interpret_petroleum(crude_stats['pct'])}\n\n"
+        f"🔗 Dados: local\n"
+    )
 
-    msg_crude = format_petroleum_msg(s_crude, dataset_link=args.dataset_link)
-    msg_products = format_products_msg(s_products, dataset_link=args.dataset_link)
-    msg_gas = format_gas_msg(s_gas, dataset_link=args.dataset_link, hist_avg=args.hist_gas_avg)
+    msg_products = (
+        f"🛢️ *ENERGY — Petroleum (Crude + Products) Weekly*\n\n"
+        f"🔖 *Série:* {products_stats['label']} ({products_stats['series_id']})\n"
+        f"📅 *Data:* {products_stats['date']}\n"
+        f"📈 *Estoque Total:* {products_stats['value']:,.0f} bbl\n"
+        f"🔁 *Variação WoW:* {products_stats['delta']:+,.0f} bbl ({products_stats['pct']:+.2f}%)\n\n"
+        f"🔍 *Interpretação rápida:* {interpret_petroleum(products_stats['pct'])}\n\n"
+        f"🔗 Dados: local\n"
+    )
 
+    msg_gas = (
+        f"⛽ *ENERGY — Gas Storage Weekly*\n\n"
+        f"🔖 *Série:* {gas_stats['label']} ({gas_stats['series_id']})\n"
+        f"📅 *Data:* {gas_stats['date']}\n"
+        f"📦 *Storage Total:* {gas_stats['value']:,.1f} Bcf\n"
+        f"🔁 *Variação WoW:* {gas_stats['delta']:+.1f} Bcf ({gas_stats['pct']:+.2f}%)\n\n"
+        f"🔍 *Interpretação rápida:* {interpret_gas(gas_stats['value'], gas_stats['delta'])}\n\n"
+        f"🔗 Dados: local\n"
+    )
+
+    # grava
     with open(args.out_crude, "w", encoding="utf-8") as f:
         f.write(msg_crude)
     with open(args.out_products, "w", encoding="utf-8") as f:
@@ -174,7 +143,7 @@ def main() -> None:
     with open(args.out_gas, "w", encoding="utf-8") as f:
         f.write(msg_gas)
 
-    print("WROTE", args.out_crude, args.out_products, args.out_gas)
+    print("WROTE telegram messages")
 
 
 if __name__ == "__main__":
