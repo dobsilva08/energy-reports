@@ -25,25 +25,44 @@ if TELEGRAM_BOT_TOKEN is None or TELEGRAM_CHAT_ID_ENERGY is None:
 # Telegram
 # ------------------------------------------------------------------
 def telegram_send_message(text: str):
+    """
+    Envia mensagem para o Telegram usando HTML seguro.
+    """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID_ENERGY,
         "text": text,
-        "parse_mode": "Markdown",
+        "parse_mode": "HTML",
     }
     r = requests.post(url, data=payload)
-    if r.status_code != 200:
-        print("Falha ao enviar mensagem para Telegram:", r.text)
+
+    try:
+        data = r.json()
+    except Exception:
+        print("Resposta bruta do Telegram:", r.text)
+        return
+
+    if not data.get("ok", False):
+        print("Erro ao enviar mensagem para Telegram:", data)
 
 
 def telegram_send_document(filepath: str):
+    """
+    Envia o arquivo JSON gerado como documento.
+    """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
     with open(filepath, "rb") as doc:
         files = {"document": doc}
         data = {"chat_id": TELEGRAM_CHAT_ID_ENERGY}
         r = requests.post(url, data=data, files=files)
-        if r.status_code != 200:
-            print("Falha ao enviar documento:", r.text)
+        try:
+            resp = r.json()
+        except Exception:
+            print("Resposta bruta do Telegram (document):", r.text)
+            return
+
+        if not resp.get("ok", False):
+            print("Erro ao enviar documento para Telegram:", resp)
 
 
 # ------------------------------------------------------------------
@@ -95,7 +114,7 @@ def get_fred_series():
 
 
 # ------------------------------------------------------------------
-# Monta relatório em formato “WTI+Brent”
+# Monta relatório em formato “WTI+Brent” (HTML seguro)
 # ------------------------------------------------------------------
 def build_structured_report(obs):
     today_str = datetime.utcnow().date().isoformat()
@@ -130,19 +149,25 @@ def build_structured_report(obs):
             "Pressão altista no curto prazo, refletindo custos maiores e possível "
             "repasse para cadeias intensivas em carvão."
         )
-        exec_bullet_trend = "Índice de carvão em alta, sugerindo pressão de custos na cadeia energética."
+        exec_bullet_trend = (
+            "Índice de carvão em alta, sugerindo pressão de custos na cadeia energética."
+        )
     elif trend == "queda":
         curto_prazo = (
             "Pressão baixista no curto prazo, indicando alívio parcial de custos "
             "para setores dependentes de carvão."
         )
-        exec_bullet_trend = "Índice de carvão em queda, abrindo espaço para redução de custos industriais."
+        exec_bullet_trend = (
+            "Índice de carvão em queda, abrindo espaço para redução de custos industriais."
+        )
     else:
         curto_prazo = (
             "Movimento mais lateralizado no curto prazo, com mercado ajustando "
             "expectativas entre oferta, demanda e transição energética."
         )
-        exec_bullet_trend = "Índice de carvão relativamente estável, sem choques de preço relevantes no dia."
+        exec_bullet_trend = (
+            "Índice de carvão relativamente estável, sem choques de preço relevantes no dia."
+        )
 
     medio_prazo = (
         "No médio prazo, a combinação de transição energética, políticas climáticas "
@@ -151,102 +176,120 @@ def build_structured_report(obs):
         "regionais possam gerar picos temporários de preço."
     )
 
-    # header + corpo
-    header = f"📊 Coal — {today_str} — Diário\n\n**Relatório Diário — Índice de Carvão (PPI – WPU051)**\n"
+    # HEADER
+    header = (
+        f"📊 <b>Coal — {today_str} — Diário</b>\n\n"
+        f"<b>Relatório Diário — Índice de Carvão (PPI – WPU051)</b>\n"
+    )
 
-    bloco_1 = f"""
-1) **Índice de preços do carvão (PPI – Coal)**
-   - Índice mais recente: {last_value:,.2f}
-   - Data da última observação: {last_date}"""
+    # Blocos numerados (usamos apenas texto + \n, sem markdown)
+    bloco_1 = (
+        "\n1) <b>Índice de preços do carvão (PPI – Coal)</b>\n"
+        f"   - Índice mais recente: {last_value:,.2f}\n"
+        f"   - Data da última observação: {last_date}"
+    )
     if prev_value is not None:
         sinal = "+" if delta >= 0 else "-"
-        bloco_1 += f"""
-   - Leitura anterior: {prev_value:,.2f} ({prev_date})
-   - Variação diária: {sinal}{abs(delta):,.2f} pontos ({sinal}{abs(pct_change):.2f}%)"""
+        bloco_1 += (
+            f"\n   - Leitura anterior: {prev_value:,.2f} ({prev_date})"
+            f"\n   - Variação diária: {sinal}{abs(delta):,.2f} pontos "
+            f"({sinal}{abs(pct_change):.2f}%)"
+        )
 
-    bloco_2 = f"""
-2) **Estrutura de preços e tendência**
-   - A leitura mais recente aponta para um cenário de **{trend}** no índice de preços do carvão.
-   - Movimentos no PPI de carvão tendem a refletir contratos de fornecimento de médio prazo,
-     custos de extração, transporte ferroviário e marítimo, além de ajustes contratuais
-     com grandes consumidores industriais."""
+    bloco_2 = (
+        "\n\n2) <b>Estrutura de preços e tendência</b>\n"
+        f"   - A leitura mais recente aponta para um cenário de <b>{trend}</b> "
+        "no índice de preços do carvão.\n"
+        "   - Movimentos no PPI de carvão tendem a refletir contratos de fornecimento de "
+        "médio prazo, custos de extração, transporte ferroviário e marítimo, além de "
+        "ajustes contratuais com grandes consumidores industriais."
+    )
 
-    bloco_3 = """
-3) **Fatores de oferta**
-   - A oferta de carvão é influenciada por capacidade de mineração, custos trabalhistas,
-     disponibilidade logística (portos, ferrovias) e eventuais interrupções em regiões
-     produtoras-chave.
-   - Questões regulatórias e ambientais podem restringir projetos de expansão, criando
-     assimetrias entre demanda e oferta em determinados períodos."""
+    bloco_3 = (
+        "\n\n3) <b>Fatores de oferta</b>\n"
+        "   - A oferta de carvão é influenciada por capacidade de mineração, custos "
+        "trabalhistas, disponibilidade logística (portos, ferrovias) e eventuais "
+        "interrupções em regiões produtoras-chave.\n"
+        "   - Questões regulatórias e ambientais podem restringir projetos de expansão, "
+        "criando assimetrias entre demanda e oferta em determinados períodos."
+    )
 
-    bloco_4 = """
-4) **Fatores de demanda**
-   - A demanda está ligada principalmente à geração termoelétrica e à indústria pesada
-     (aço, cimento, química).
-   - Ciclos econômicos globais, em especial na Ásia, costumam ter impacto direto na
-     utilização do carvão como fonte de energia de base."""
+    bloco_4 = (
+        "\n\n4) <b>Fatores de demanda</b>\n"
+        "   - A demanda está ligada principalmente à geração termoelétrica e à indústria "
+        "pesada (aço, cimento, química).\n"
+        "   - Ciclos econômicos globais, em especial na Ásia, costumam ter impacto direto "
+        "na utilização do carvão como fonte de energia de base."
+    )
 
-    bloco_5 = """
-5) **Transição energética e substituição**
-   - A aceleração da agenda de descarbonização, com maior participação de renováveis
-     e gás natural, pressiona estruturalmente o papel do carvão na matriz energética.
-   - Ao mesmo tempo, choques em outras fontes (como gás ou petróleo) podem gerar
-     movimentos táticos de volta ao carvão em alguns países."""
+    bloco_5 = (
+        "\n\n5) <b>Transição energética e substituição</b>\n"
+        "   - A aceleração da agenda de descarbonização, com maior participação de "
+        "renováveis e gás natural, pressiona estruturalmente o papel do carvão na matriz "
+        "energética.\n"
+        "   - Ao mesmo tempo, choques em outras fontes (como gás ou petróleo) podem gerar "
+        "movimentos táticos de volta ao carvão em alguns países."
+    )
 
-    bloco_6 = """
-6) **FX (DXY) e condições financeiras**
-   - Um dólar mais forte tende a pressionar commodities cotadas em USD, encarecendo
-     a importação de carvão para economias emergentes.
-   - Condições financeiras mais apertadas (juros mais altos) podem reduzir investimentos
-     em expansão de capacidade e logística."""
+    bloco_6 = (
+        "\n\n6) <b>FX (DXY) e condições financeiras</b>\n"
+        "   - Um dólar mais forte tende a pressionar commodities cotadas em USD, "
+        "encarecendo a importação de carvão para economias emergentes.\n"
+        "   - Condições financeiras mais apertadas (juros mais altos) podem reduzir "
+        "investimentos em expansão de capacidade e logística."
+    )
 
-    bloco_7 = """
-7) **Notas de pesquisa e instituições**
-   - Relatórios de instituições multilaterais e agências de energia apontam que a
-     participação do carvão na matriz tende a cair gradualmente, mas ainda parte
-     de uma base elevada em países em desenvolvimento.
-   - Revisões de cenário costumam acompanhar mudanças em crescimento global,
-     política climática e choques de oferta em outras fontes de energia."""
+    bloco_7 = (
+        "\n\n7) <b>Notas de pesquisa e instituições</b>\n"
+        "   - Relatórios de instituições multilaterais e agências de energia apontam que a "
+        "participação do carvão na matriz tende a cair gradualmente, mas ainda parte de "
+        "uma base elevada em países em desenvolvimento.\n"
+        "   - Revisões de cenário costumam acompanhar mudanças em crescimento global, "
+        "política climática e choques de oferta em outras fontes de energia."
+    )
 
-    bloco_8 = f"""
-8) **Interpretação executiva (bullet points)**
-   - {exec_bullet_trend}
-   - Custos de geração termoelétrica e indústria pesada seguem sensíveis ao comportamento do índice.
-   - Transição energética limita a alta estrutural, mas choques de curto prazo ainda podem ser relevantes.
-   - Dólar e condições financeiras continuam importantes para o custo global de energia."""
+    bloco_8 = (
+        "\n\n8) <b>Interpretação executiva (bullet points)</b>\n"
+        f"   - {exec_bullet_trend}\n"
+        "   - Custos de geração termoelétrica e indústria pesada seguem sensíveis ao "
+        "comportamento do índice.\n"
+        "   - Transição energética limita a alta estrutural, mas choques de curto prazo "
+        "ainda podem ser relevantes.\n"
+        "   - Dólar e condições financeiras continuam importantes para o custo global de energia."
+    )
 
-    bloco_9 = f"""
-9) **Conclusão (curto e médio prazo)**
-   - **Curto prazo:** {curto_prazo}
-   - **Médio prazo:** {medio_prazo}"""
+    bloco_9 = (
+        "\n\n9) <b>Conclusão (curto e médio prazo)</b>\n"
+        f"   - <b>Curto prazo:</b> {curto_prazo}\n"
+        f"   - <b>Médio prazo:</b> {medio_prazo}"
+    )
 
-    # Se quiser, pode registrar aqui qual LLM/engine gerou (mesmo sendo template)
-    bloco_10 = "\n\nLLM: template_coal · deterministic\n"
+    bloco_10 = "\n\n<i>LLM: template_coal · deterministic</i>\n"
 
-    markdown = (
+    html_text = (
         header
-        + "\n"
         + bloco_1
-        + "\n"
         + bloco_2
-        + "\n"
         + bloco_3
-        + "\n"
         + bloco_4
-        + "\n"
         + bloco_5
-        + "\n"
         + bloco_6
-        + "\n"
         + bloco_7
-        + "\n"
         + bloco_8
-        + "\n"
         + bloco_9
         + bloco_10
     ).strip()
 
-    return markdown, last_value, last_date, prev_value, prev_date, delta, pct_change, trend
+    return (
+        html_text,
+        last_value,
+        last_date,
+        prev_value,
+        prev_date,
+        delta,
+        pct_change,
+        trend,
+    )
 
 
 # ------------------------------------------------------------------
@@ -262,9 +305,9 @@ def main():
         print("🟦 Coletando dados...")
         obs = get_fred_series()
 
-        print("🟩 Construindo relatório estruturado...")
+        print("🟩 Construindo relatório estruturado (HTML)...")
         (
-            markdown,
+            html_text,
             last_value,
             last_date,
             prev_value,
@@ -285,7 +328,7 @@ def main():
             "trend": trend,
             "generated_at": datetime.utcnow().isoformat(),
             "preview": args.preview,
-            "markdown": markdown,
+            "html": html_text,
         }
 
         # Salva JSON
@@ -302,7 +345,7 @@ def main():
 
         print("📨 Enviando relatório para o Telegram...")
         telegram_send_message(title)
-        telegram_send_message(markdown)
+        telegram_send_message(html_text)
         telegram_send_document(args.out)
 
         print("✔ Relatório enviado!")
@@ -310,7 +353,7 @@ def main():
     except Exception as e:
         print(f"❌ Erro ao gerar relatório de Coal: {e}")
         try:
-            telegram_send_message(f"❌ Erro ao gerar relatório de Coal:\n`{e}`")
+            telegram_send_message(f"❌ Erro ao gerar relatório de Coal:\n<code>{e}</code>")
         except Exception as e2:
             print("Falha ao enviar mensagem de erro para o Telegram:", e2)
         raise
