@@ -27,6 +27,7 @@ if TELEGRAM_BOT_TOKEN is None or TELEGRAM_CHAT_ID_ENERGY is None:
 def telegram_send_message(text: str):
     """
     Envia mensagem para o Telegram usando HTML seguro.
+    (não envia documento nem título separado)
     """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -44,25 +45,6 @@ def telegram_send_message(text: str):
 
     if not data.get("ok", False):
         print("Erro ao enviar mensagem para Telegram:", data)
-
-
-def telegram_send_document(filepath: str):
-    """
-    Envia o arquivo JSON gerado como documento.
-    """
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-    with open(filepath, "rb") as doc:
-        files = {"document": doc}
-        data = {"chat_id": TELEGRAM_CHAT_ID_ENERGY}
-        r = requests.post(url, data=data, files=files)
-        try:
-            resp = r.json()
-        except Exception:
-            print("Resposta bruta do Telegram (document):", r.text)
-            return
-
-        if not resp.get("ok", False):
-            print("Erro ao enviar documento para Telegram:", resp)
 
 
 # ------------------------------------------------------------------
@@ -140,6 +122,9 @@ def build_structured_report(obs):
         trend = "alta"
     elif pct_change < -0.5:
         trend = "queda"
+        exec_bullet_trend = (
+            "Índice de carvão em queda, abrindo espaço para redução de custos industriais."
+        )
     else:
         trend = "estabilidade"
 
@@ -156,9 +141,6 @@ def build_structured_report(obs):
         curto_prazo = (
             "Pressão baixista no curto prazo, indicando alívio parcial de custos "
             "para setores dependentes de carvão."
-        )
-        exec_bullet_trend = (
-            "Índice de carvão em queda, abrindo espaço para redução de custos industriais."
         )
     else:
         curto_prazo = (
@@ -182,7 +164,7 @@ def build_structured_report(obs):
         f"<b>Relatório Diário — Índice de Carvão (PPI – WPU051)</b>\n"
     )
 
-    # Blocos numerados (usamos apenas texto + \n, sem markdown)
+    # Blocos numerados
     bloco_1 = (
         "\n1) <b>Índice de preços do carvão (PPI – Coal)</b>\n"
         f"   - Índice mais recente: {last_value:,.2f}\n"
@@ -331,22 +313,14 @@ def main():
             "html": html_text,
         }
 
-        # Salva JSON
+        # Salva JSON localmente (não envia para o Telegram)
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
 
         print(f"🟧 JSON salvo em {args.out}")
 
-        title = (
-            "📘 Coal — Relatório Diário (Preview)"
-            if args.preview
-            else "📘 Coal — Relatório Diário"
-        )
-
-        print("📨 Enviando relatório para o Telegram...")
-        telegram_send_message(title)
+        print("📨 Enviando relatório único para o Telegram...")
         telegram_send_message(html_text)
-        telegram_send_document(args.out)
 
         print("✔ Relatório enviado!")
 
