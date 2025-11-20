@@ -16,13 +16,12 @@ Saídas (PNG):
 """
 
 import argparse
-from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 
 
 def _base_style():
-    """Ajusta estilo básico (tipo 'banco', mas sem mexer em cores diretamente)."""
+    """Estilo mais 'clean' tipo banco."""
     plt.style.use("default")
     plt.rcParams["axes.spines.top"] = False
     plt.rcParams["axes.spines.right"] = False
@@ -30,6 +29,11 @@ def _base_style():
     plt.rcParams["grid.linestyle"] = "--"
     plt.rcParams["grid.alpha"] = 0.3
     plt.rcParams["figure.figsize"] = (10, 4)
+    plt.rcParams["axes.titleweight"] = "bold"
+    plt.rcParams["axes.titlesize"] = 11
+    plt.rcParams["axes.labelsize"] = 9
+    plt.rcParams["xtick.labelsize"] = 8
+    plt.rcParams["ytick.labelsize"] = 8
 
 
 def prepare_df_full(path: str, value_col: str) -> pd.DataFrame:
@@ -58,7 +62,23 @@ def prepare_df_12w(path: str, value_col: str) -> pd.DataFrame:
 def plot_line(df: pd.DataFrame, date_col: str, value_col: str, title: str, ylabel: str, outfile: str):
     _base_style()
     plt.figure()
-    plt.plot(df[date_col], df[value_col], marker="o", linewidth=2)
+    x = df[date_col]
+    y = df[value_col]
+
+    # linha principal
+    plt.plot(x, y, marker="o", linewidth=2)
+
+    # destaca último ponto
+    plt.scatter(x.iloc[-1], y.iloc[-1], s=40, zorder=5)
+    plt.annotate(
+        f"{y.iloc[-1]:,.0f}",
+        xy=(x.iloc[-1], y.iloc[-1]),
+        xytext=(5, 0),
+        textcoords="offset points",
+        fontsize=8,
+        va="center",
+    )
+
     plt.title(title)
     plt.xlabel("Semana")
     plt.ylabel(ylabel)
@@ -71,9 +91,7 @@ def plot_line(df: pd.DataFrame, date_col: str, value_col: str, title: str, ylabe
 
 def plot_gas_vs_5y(df_gas: pd.DataFrame, outfile: str):
     """
-    Plota Gas Storage atual vs média 5 anos (por semana do ano).
-    - Linha 1: ano corrente
-    - Linha 2: média das últimas 5 safras anteriores
+    Gas Storage: ano atual vs média dos 5 anos anteriores (por semana ISO).
     """
     _base_style()
     df = df_gas.copy()
@@ -96,11 +114,12 @@ def plot_gas_vs_5y(df_gas: pd.DataFrame, outfile: str):
     plt.figure()
     plt.plot(merged["date"], merged["storage_bcf"], marker="o", linewidth=2, label=f"{current_year} (atual)")
     plt.plot(merged["date"], merged["storage_mean"], linestyle="--", linewidth=2, label="Média 5 anos anteriores")
+
     plt.title("Gas Storage — ano atual vs média 5 anos (por semana)")
     plt.xlabel("Semana")
     plt.ylabel("Bcf")
     plt.xticks(rotation=45, ha="right")
-    plt.legend()
+    plt.legend(fontsize=8)
     plt.tight_layout()
     plt.savefig(outfile, dpi=150)
     plt.close()
@@ -109,7 +128,7 @@ def plot_gas_vs_5y(df_gas: pd.DataFrame, outfile: str):
 
 def plot_crude_seasonality(df_crude: pd.DataFrame, outfile: str):
     """
-    Crude Seasonality (últimos 5 anos) — cada ano como uma linha vs semana do ano.
+    Crude Seasonality (últimos 5 anos) — cada ano como uma linha vs semana ISO.
     """
     _base_style()
     df = df_crude.copy()
@@ -125,15 +144,14 @@ def plot_crude_seasonality(df_crude: pd.DataFrame, outfile: str):
 
     plt.figure()
     for y in years:
-        d = df[df["year"] == y]
-        d = d.sort_values("week")
+        d = df[df["year"] == y].sort_values("week")
         plt.plot(d["week"], d["value"], linewidth=1.8, marker="o", label=str(y))
 
     plt.title("Crude Inventories — sazonalidade (últimos 5 anos)")
-    plt.xlabel("Semana do ano")
+    plt.xlabel("Semana do ano (ISO)")
     plt.ylabel("Milhões de barris (aprox.)")
     plt.xticks(rotation=0)
-    plt.legend()
+    plt.legend(fontsize=7, ncol=2)
     plt.tight_layout()
     plt.savefig(outfile, dpi=150)
     plt.close()
@@ -174,7 +192,7 @@ def main():
         args.out_products,
     )
 
-    # Gas 12w
+    # Gas full / 12w
     df_gas_full = prepare_df_full(args.gas, "storage_bcf")
     df_gas_12 = df_gas_full.copy()
     if len(df_gas_12) > 12:
