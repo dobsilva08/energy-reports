@@ -22,10 +22,18 @@ import pandas as pd
 import requests
 
 
-API_KEY = os.getenv("EIA_API_KEY")
-CRUDE_SERIES = os.getenv("EIA_PETROLEUM_CRUDE_SERIES_ID")
-PRODUCTS_SERIES = os.getenv("EIA_PETROLEUM_PRODUCTS_SERIES_ID")
-GAS_SERIES = os.getenv("EIA_GAS_STORAGE_SERIES_ID")
+def _get_env(name: str) -> str:
+    """Lê env e remove espaços/quebras de linha nas pontas."""
+    val = os.getenv(name, "")
+    if val is None:
+        return ""
+    return val.strip()
+
+
+API_KEY = _get_env("EIA_API_KEY")
+CRUDE_SERIES = _get_env("EIA_PETROLEUM_CRUDE_SERIES_ID")
+PRODUCTS_SERIES = _get_env("EIA_PETROLEUM_PRODUCTS_SERIES_ID")
+GAS_SERIES = _get_env("EIA_GAS_STORAGE_SERIES_ID")
 
 
 def _check_env() -> None:
@@ -51,7 +59,10 @@ def _check_env() -> None:
 def fetch_series(series_id: str) -> dict:
     """
     Faz o GET na API v2 da EIA para um series_id v1 usando rota /v2/seriesid.
+    Garante series_id sem espaços/quebras nas pontas.
     """
+    series_id = (series_id or "").strip()
+
     if not series_id:
         print(
             "[EIA] ERROR: series_id vazio (env não carregada corretamente).",
@@ -88,14 +99,18 @@ def parse_series_to_df(requested_id: str, j: dict) -> pd.DataFrame:
     Usa SEMPRE o `requested_id` como series_id de fallback,
     para nunca termos NaN nessa coluna.
     """
+    requested_id = (requested_id or "").strip()
+
     resp = j.get("response", {})
     data_list = resp.get("data", [])
     series_meta = resp.get("series", [])
     meta = series_meta[0] if series_meta else {}
 
     # garante que sempre teremos um series_id string
-    series_id = meta.get("seriesId") or meta.get("series_id") or requested_id
-    label = meta.get("name") or meta.get("description") or ""
+    series_id = (
+        (meta.get("seriesId") or meta.get("series_id") or requested_id or "").strip()
+    )
+    label = (meta.get("name") or meta.get("description") or "").strip()
 
     rows = []
 
