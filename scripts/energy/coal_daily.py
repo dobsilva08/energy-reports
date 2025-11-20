@@ -1,125 +1,144 @@
-#!/usr/bin/env python3
-"""
-Baixa preço global de carvão (coal) usando FRED.
-
-Série padrão:
-  - PCOALAUUSDM = Global price of Coal, Australia (US$/tonelada, mensal)
-
-Requisitos:
-  - FRED_API_KEY (já configurado nos secrets do GitHub)
-  - requests, pandas instalados
-
-Saída:
-  - CSV com colunas: date, price, source
-
-Uso:
-  python scripts/energy/coal_daily.py --out /tmp/coal_price.csv
-"""
-
-import argparse
 import os
-from datetime import datetime
+import json
+import argparse
 import requests
-import pandas as pd
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
+# ------------------------------------------------------------------
+# Carrega variáveis de ambiente
+# ------------------------------------------------------------------
+load_dotenv()
+
+FRED_API_KEY = os.getenv("FRED_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID_ENERGY = os.getenv("TELEGRAM_CHAT_ID_ENERGY")
+
+if FRED_API_KEY is None:
+    raise RuntimeError("FRED_API_KEY não encontrado nas variáveis de ambiente.")
+
+if TELEGRAM_BOT_TOKEN is None or TELEGRAM_CHAT_ID_ENERGY is None:
+    raise RuntimeError(
+        "TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID_ENERGY não configurados."
+    )
+
+# ------------------------------------------------------------------
+# Telegram: envio de texto
+# ------------------------------------------------------------------
+def telegram_send_message(text: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID_ENERGY,
+        "text": text,
+        "parse_mode": "Markdown",
+    }
+    r = requests.post(url, data=payload)
+    if r.status_code != 200:
+        print("Falha ao enviar mensagem para Telegram:", r.text)
 
 
-def fetch_coal_from_fred(
-    api_key: str,
-    series_id: str = "PCOALAUUSDM",
-    observation_start: str = "1990-01-01",
-) -> pd.DataFrame:
-    """
-    Busca Global price of Coal, Australia (US$/ton, mensal) via FRED.
+# ------------------------------------------------------------------
+# Telegram: envio de documento JSON
+# ------------------------------------------------------------------
+def telegram_send_document(filepath: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+    with open(filepath, "rb") as doc:
+        files = {"document": doc}
+        data = {"chat_id": TELEGRAM_CHAT_ID_ENERGY}
+        r = requests.post(url, data=data, files=files)
+        if r.status_code != 200:
+            print("Falha ao enviar documento:", r.text)
 
-    Série default:
-      - PCOALAUUSDM
-    """
+
+# ------------------------------------------------------------------
+# Coleta de preços do FRED — Série Coal
+# ------------------------------------------------------------------
+FRED_SERIES_ID = "PCOALUSDM"  # preço do carvão USD/ton
+
+
+def get_fred_series():
+    url = "https://api.stlouisfed.org/fred/series/observations"
     params = {
-        "series_id": series_id,
-        "api_key": api_key,
+        "series_id": FRED_SERIES_ID,
+        "api_key": FRED_API_KEY,
         "file_type": "json",
-        "observation_start": observation_start,
+        "observation_start": (datetime.utcnow() - timedelta(days=60)).strftime(
+            "%Y-%m-%d"
+        ),
     }
 
-    resp = requests.get(FRED_BASE_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
+    r = requests.get(url, params=params)
+    data = r.json()
 
-    observations = data.get("observations", [])
-    if not observations:
-        raise RuntimeError(f"Nenhuma observação retornada para série {series_id} no FRED.")
+    if "observations" not in data:
+        raise RuntimeError(f"Erro retornado pelo FRED: {data}")
 
-    rows = []
-    for obs in observations:
-        date_str = obs.get("date")
-        value_str = obs.get("value")
-
-        # FRED usa "." quando não há valor
-        if value_str in (None, ".", ""):
-            continue
-
-        try:
-            price = float(value_str)
-        except ValueError:
-            continue
-
-        dt = datetime.strptime(date_str, "%Y-%m-%d").date()
-        rows.append(
-            {
-                "date": dt,
-                "price": price,
-                "source": f"FRED:{series_id}",
-            }
-        )
-
-    if not rows:
-        raise RuntimeError(f"Nenhum valor numérico válido encontrado para série {series_id}.")
-
-    df = pd.DataFrame(rows)
-    df = df.sort_values("date").reset_index(drop=True)
-    return df
+    obs = [o for o in data["observations"] if o["value"] not in ("", ".")]
+    return obs
 
 
+# ------------------------------------------------------------------
+# Monta relatório
+# ------------------------------------------------------------------
+def build_markdown(obs):
+    last = obs[-1]
+    price = float(last["value"])
+    date = last["date"]
+
+    md = f"""
+# 🏭 Coal — Relatório Diário
+
+**Preço mais recente:** *${price:,.2f}*  
+**Data:** {date}
+
+---
+
+A cotação do carvão reflete variações ligadas à demanda industrial global, logística de transporte marítimo,
+e mudanças na matriz energética mundial.
+
+Este relatório é gerado automaticamente.
+"""
+    return md.strip(), price
+
+
+# ------------------------------------------------------------------
+# MAIN
+# ------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Baixa preço global de carvão (coal) via FRED.")
-    parser.add_argument(
-        "--out",
-        required=True,
-        help="Caminho do CSV de saída (ex: /tmp/coal_price.csv)",
-    )
-    parser.add_argument(
-        "--series-id",
-        default=os.environ.get("COAL_FRED_SERIES_ID", "PCOALAUUSDM"),
-        help="ID da série no FRED (default: PCOALAUUSDM).",
-    )
-    parser.add_argument(
-        "--start",
-        default="1990-01-01",
-        help="Data inicial (YYYY-MM-DD, default: 1990-01-01).",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--preview", action="store_true")
     args = parser.parse_args()
 
-    api_key = os.environ.get("FRED_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "FRED_API_KEY não encontrado nas variáveis de ambiente. "
-            "Configure o secret FRED_API_KEY no GitHub."
-        )
+    print("🟦 Coletando dados...")
+    obs = get_fred_series()
 
-    df = fetch_coal_from_fred(
-        api_key=api_key,
-        series_id=args.series_id,
-        observation_start=args.start,
-    )
+    markdown, price = build_markdown(obs)
 
-    out_path = os.path.abspath(args.out)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    result = {
+        "series_id": FRED_SERIES_ID,
+        "last_price": price,
+        "last_date": obs[-1]["date"],
+        "generated_at": datetime.utcnow().isoformat(),
+        "preview": args.preview,
+        "markdown": markdown,
+    }
 
-    df.to_csv(out_path, index=False)
-    print(f"[COAL/FRED] CSV salvo em {out_path}")
-    print(f"[COAL/FRED] Linhas: {len(df)} — Período {df['date'].min()} → {df['date'].max()}")
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+
+    print(f"🟧 JSON salvo em {args.out}")
+
+    title = "📘 Coal — Relatório Diário (Preview)" if args.preview else "📘 Coal — Relatório Diário"
+
+    print("📨 Enviando relatório...")
+    telegram_send_message(title)
+    telegram_send_message(markdown)
+    telegram_send_document(args.out)
+
+    print("✔ Relatório enviado!")
 
 
 if __name__ == "__main__":
