@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # Variáveis de ambiente (vindas do GitHub Actions)
 # ------------------------------------------------------------------
 FRED_API_KEY = os.getenv("FRED_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # pode não ser usado ainda
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # reservado para uso futuro
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID_ENERGY = os.getenv("TELEGRAM_CHAT_ID_ENERGY")
@@ -52,29 +52,49 @@ def telegram_send_document(filepath: str):
 # ------------------------------------------------------------------
 # Coleta de preços do FRED — Série Coal
 # ------------------------------------------------------------------
-FRED_SERIES_ID = "PCOALAUUSDM"  # Global price of Coal, Australia
-
+# Série válida de carvão (Producer Price Index: Coal, índice 1982=100)
+FRED_SERIES_ID = "WPU051"
 
 
 def get_fred_series():
+    """
+    Busca observações da série do FRED e garante que exista dado válido.
+    Levanta RuntimeError com mensagem descritiva se algo vier vazio/errado.
+    """
     url = "https://api.stlouisfed.org/fred/series/observations"
     params = {
         "series_id": FRED_SERIES_ID,
         "api_key": FRED_API_KEY,
         "file_type": "json",
-        "observation_start": (datetime.utcnow() - timedelta(days=60)).strftime(
+        # usa 5 anos para garantir dados suficientes
+        "observation_start": (datetime.utcnow() - timedelta(days=5 * 365)).strftime(
             "%Y-%m-%d"
         ),
     }
 
     r = requests.get(url, params=params)
-    data = r.json()
+    try:
+        data = r.json()
+    except Exception:
+        raise RuntimeError(f"Resposta inválida do FRED: status={r.status_code}, texto={r.text}")
 
     if "observations" not in data:
-        raise RuntimeError(f"Erro retornado pelo FRED: {data}")
+        raise RuntimeError(f"Erro retornado pelo FRED (sem 'observations'): {data}")
 
-    obs = [o for o in data["observations"] if o["value"] not in ("", ".")]
-    return obs
+    obs_list = data["observations"]
+
+    if not obs_list:
+        raise RuntimeError(f"Nenhuma observação retornada para a série {FRED_SERIES_ID}.")
+
+    # Filtra apenas valores válidos
+    valid_obs = [o for o in obs_list if o.get("value") not in ("", ".", None)]
+
+    if not valid_obs:
+        raise RuntimeError(
+            f"Todas as observações estão vazias/sem valor para a série {FRED_SERIES_ID}."
+        )
+
+    return valid_obs
 
 
 # ------------------------------------------------------------------
@@ -82,23 +102,28 @@ def get_fred_series():
 # ------------------------------------------------------------------
 def build_markdown(obs):
     last = obs[-1]
-    price = float(last["value"])
+    value = float(last["value"])
     date = last["date"]
 
     md = f"""
 # 🏭 Coal — Relatório Diário
 
-**Preço mais recente:** *${price:,.2f}*  
-**Data:** {date}
+**Índice mais recente (PPI – Coal):** *{value:,.2f}*  
+**Data da última observação:** {date}
 
 ---
 
-A cotação do carvão reflete variações ligadas à demanda industrial global, à logística de transporte marítimo
-e às mudanças na matriz energética mundial.
+Este índice representa o *Producer Price Index* (PPI) para carvão, medindo a variação
+dos preços ao produtor do setor de carvão nos Estados Unidos (base 1982=100).
 
-Este relatório é gerado automaticamente.
+Movimentos nesse índice refletem:
+- Mudanças na demanda industrial por carvão;
+- Custos de produção e transporte;
+- Substituição por outras fontes de energia e políticas de transição energética.
+
+Este relatório é gerado automaticamente como parte da rotina diária de energia.
 """
-    return md.strip(), price
+    return md.strip(), value
 
 
 # ------------------------------------------------------------------
@@ -106,37 +131,55 @@ Este relatório é gerado automaticamente.
 # ------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", required=True)
-    parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--out", required=True, help="Caminho do arquivo JSON de saída")
+    parser.add_argument("--preview", action="store_true", help="Roda em modo de teste")
     args = parser.parse_args()
 
-    print("🟦 Coletando dados...")
-    obs = get_fred_series()
+    try:
+        print("🟦 Coletando dados...")
+        obs = get_fred_series()
 
-    markdown, price = build_markdown(obs)
+        print("🟩 Construindo relatório...")
+        markdown, value = build_markdown(obs)
 
-    result = {
-        "series_id": FRED_SERIES_ID,
-        "last_price": price,
-        "last_date": obs[-1]["date"],
-        "generated_at": datetime.utcnow().isoformat(),
-        "preview": args.preview,
-        "markdown": markdown,
-    }
+        result = {
+            "series_id": FRED_SERIES_ID,
+            "last_value": value,
+            "last_date": obs[-1]["date"],
+            "generated_at": datetime.utcnow().isoformat(),
+            "preview": args.preview,
+            "markdown": markdown,
+        }
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
+        # Salva JSON
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
 
-    print(f"🟧 JSON salvo em {args.out}")
+        print(f"🟧 JSON salvo em {args.out}")
 
-    title = "📘 Coal — Relatório Diário (Preview)" if args.preview else "📘 Coal — Relatório Diário"
+        title = (
+            "📘 Coal — Relatório Diário (Preview)"
+            if args.preview
+            else "📘 Coal — Relatório Diário"
+        )
 
-    print("📨 Enviando relatório...")
-    telegram_send_message(title)
-    telegram_send_message(markdown)
-    telegram_send_document(args.out)
+        print("📨 Enviando relatório para o Telegram...")
+        telegram_send_message(title)
+        telegram_send_message(markdown)
+        telegram_send_document(args.out)
 
-    print("✔ Relatório enviado!")
+        print("✔ Relatório enviado!")
+
+    except Exception as e:
+        # Loga no console para o GitHub Actions
+        print(f"❌ Erro ao gerar relatório de Coal: {e}")
+        # Opcional: avisar no Telegram também
+        try:
+            telegram_send_message(f"❌ Erro ao gerar relatório de Coal:\n`{e}`")
+        except Exception as e2:
+            print("Falha ao enviar mensagem de erro para o Telegram:", e2)
+        # Propaga o erro para o job marcar como falho
+        raise
 
 
 if __name__ == "__main__":
