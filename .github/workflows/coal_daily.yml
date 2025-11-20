@@ -20,7 +20,6 @@ jobs:
 
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      # ajuste o nome do secret abaixo se quiser um ID específico pra carvão
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_COAL }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
 
@@ -43,8 +42,12 @@ jobs:
 
       - name: Rodar coal_daily.py
         run: |
+          mkdir -p pipelines/energy
+          OUT_FILE="pipelines/energy/coal_daily.json"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/energy/coal_daily.py --preview
+            echo "Executando em modo preview..."
+            python scripts/energy/coal_daily.py --out "$OUT_FILE" --preview
           else
-            python scripts/energy/coal_daily.py
+            python scripts/energy/coal_daily.py --out "$OUT_FILE"
           fi
