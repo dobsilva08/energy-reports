@@ -1,4 +1,4 @@
-name: EIA Weekly Inventories
+name: EIA Weekly Inventories v2
 
 on:
   schedule:
