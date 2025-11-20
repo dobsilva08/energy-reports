@@ -3,15 +3,12 @@ import json
 import argparse
 import requests
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
 
 # ------------------------------------------------------------------
-# Carrega variáveis de ambiente
+# Variáveis de ambiente (vindas do GitHub Actions)
 # ------------------------------------------------------------------
-load_dotenv()
-
 FRED_API_KEY = os.getenv("FRED_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # pode não ser usado ainda
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID_ENERGY = os.getenv("TELEGRAM_CHAT_ID_ENERGY")
@@ -95,8 +92,8 @@ def build_markdown(obs):
 
 ---
 
-A cotação do carvão reflete variações ligadas à demanda industrial global, logística de transporte marítimo,
-e mudanças na matriz energética mundial.
+A cotação do carvão reflete variações ligadas à demanda industrial global, à logística de transporte marítimo
+e às mudanças na matriz energética mundial.
 
 Este relatório é gerado automaticamente.
 """
