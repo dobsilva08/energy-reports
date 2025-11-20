@@ -1,0 +1,59 @@
+name: eia_weekly_inventories
+description: "EIA Weekly Inventories — crude, crude+products e gas storage"
+schedule: "0 12 * * Thu"  # quinta 12:00 UTC (ajuste se quiser)
+
+tasks:
+  - id: fetch_and_parse
+    type: python
+    params:
+      script: "scripts/energy/fetch_and_parse_eia.py"
+      # Usa as ENV:
+      #  - EIA_API_KEY
+      #  - EIA_PETROLEUM_CRUDE_SERIES_ID
+      #  - EIA_PETROLEUM_PRODUCTS_SERIES_ID
+      #  - EIA_GAS_STORAGE_SERIES_ID
+
+  - id: smoke_check
+    type: python
+    params:
+      script: "scripts/energy/smoke_check_inventories.py"
+      args:
+        - "/tmp/petroleum_crude.csv"
+        - "/tmp/petroleum_products.csv"
+        - "/tmp/gas_storage.csv"
+
+  - id: format_messages
+    type: python
+    params:
+      script: "scripts/energy/format_telegram_inventory.py"
+      args:
+        - "--crude"
+        - "/tmp/petroleum_crude.csv"
+        - "--products"
+        - "/tmp/petroleum_products.csv"
+        - "--gas"
+        - "/tmp/gas_storage.csv"
+        - "--out-crude"
+        - "/tmp/telegram_petroleum_crude.txt"
+        - "--out-products"
+        - "/tmp/telegram_petroleum_products.txt"
+        - "--out-gas"
+        - "/tmp/telegram_gas_storage.txt"
+
+  - id: notify_petroleum_crude
+    type: notify
+    params:
+      channel: telegram
+      message_file: "/tmp/telegram_petroleum_crude.txt"
+
+  - id: notify_petroleum_products
+    type: notify
+    params:
+      channel: telegram
+      message_file: "/tmp/telegram_petroleum_products.txt"
+
+  - id: notify_gas_storage
+    type: notify
+    params:
+      channel: telegram
+      message_file: "/tmp/telegram_gas_storage.txt"
