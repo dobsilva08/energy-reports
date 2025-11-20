@@ -52,7 +52,8 @@ def telegram_send_document(filepath: str):
 # ------------------------------------------------------------------
 # Coleta de preços do FRED — Série Coal
 # ------------------------------------------------------------------
-FRED_SERIES_ID = "PCCOALUSDM"  # preço do carvão USD/ton
+FRED_SERIES_ID = "PCOALAUUSDM"  # Global price of Coal, Australia
+
 
 
 def get_fred_series():
