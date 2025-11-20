@@ -1,14 +1,14 @@
-name: Coal — Relatório Diário (FRED)
+name: Coal — Relatório Diário
 
 on:
   schedule:
-   - cron: "7 9 * * *"   # 06:07 BRT
+    - cron: "0 9 * * *"   # 06:00 BRT
   workflow_dispatch:
     inputs:
       preview:
         type: boolean
         default: false
-        description: "Enviar para TESTE"
+        description: "Enviar relatório em modo TESTE"
 
 concurrency:
   group: coal-daily
@@ -26,11 +26,10 @@ jobs:
       # ==== Telegram ====
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
-      # se o script usar TELEGRAM_CHAT_ID_COAL em vez de ENERGY,
-      # troque a linha acima por:
-      # TELEGRAM_CHAT_ID_COAL: ${{ secrets.TELEGRAM_CHAT_ID_COAL }}
+      # Caso o script use outra variável específica, troque acima.
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -47,8 +46,11 @@ jobs:
       - name: Rodar coal_daily.py
         run: |
           mkdir -p pipelines/energy
+
+          OUT_FILE="pipelines/energy/coal_daily.json"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/energy/coal_daily.py --preview
+            python scripts/energy/coal_daily.py --out "$OUT_FILE" --preview
           else
-            python scripts/energy/coal_daily.py
+            python scripts/energy/coal_daily.py --out "$OUT_FILE"
           fi
