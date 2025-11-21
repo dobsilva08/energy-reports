@@ -19,10 +19,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      # pode usar o mesmo chat de gas_daily ou um específico:
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_GAS_JKM }}
+      # ==== APIs ====
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+
+      # ==== Telegram ====
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
 
     steps:
       - name: Checkout
@@ -43,8 +45,11 @@ jobs:
 
       - name: Rodar jkm_lng_daily.py
         run: |
+          mkdir -p pipelines/gas
+          OUT_FILE="pipelines/gas/jkm_lng_daily.json"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/gas/jkm_lng_daily.py --preview
+            python scripts/gas/jkm_lng_daily.py --out "$OUT_FILE" --preview
           else
-            python scripts/gas/jkm_lng_daily.py
+            python scripts/gas/jkm_lng_daily.py --out "$OUT_FILE"
           fi
