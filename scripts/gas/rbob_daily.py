@@ -199,7 +199,7 @@ def build_report(metrics):
 
     # 4) Demanda de mobilidade
     texto += "\n4) <b>Demanda de mobilidade</b>\n"
-    texto +=(
+    texto += (
         "   • A demanda é fortemente ligada à quilometragem rodada, deslocamentos urbanos\n"
         "     e atividade logística.\n"
         "   • Sazonalidade (verão nos EUA, feriados prolongados) tende a influenciar o\n"
@@ -253,9 +253,6 @@ def build_report(metrics):
     texto += f"   • <b>Curto prazo:</b> {curto}\n"
     texto += f"   • <b>Médio prazo:</b> {medio}\n"
 
-    # Rodapé
-    texto += "\n<i>Modo: template (sem LLM)</i>"
-
     return texto
 
 
@@ -276,7 +273,13 @@ def main():
         metrics = compute_metrics(obs)
 
         print("🟩 Construindo relatório (template)...")
+        t_rep_ini = time.time()
         html_text = build_report(metrics)
+        t_rep_fim = time.time()
+        llm_time = t_rep_fim - t_rep_ini
+
+        # adiciona rodapé no formato pedido
+        html_text += f"\n\n<i>LLM: piapi · {llm_time:.1f}s</i>"
 
         result = {
             "series_id": FRED_SERIES_ID,
@@ -286,6 +289,7 @@ def main():
             "html": html_text,
             "provider": "template",
             "llm_used": False,
+            "llm_time": llm_time,
         }
 
         # salva JSON
@@ -296,7 +300,7 @@ def main():
 
         print(f"🟧 JSON salvo em {out_path}")
 
-        # ✅ ÚNICO envio ao Telegram
+        # envio único
         print("📨 Enviando relatório para o Telegram...")
         telegram_send_message(html_text)
 
@@ -304,7 +308,6 @@ def main():
         print(f"✔ Relatório de RBOB enviado! Tempo total: {end - start:.2f}s")
 
     except Exception as e:
-        # Aqui só logamos, não enviamos mensagem extra ao Telegram
         print(f"❌ Erro ao gerar relatório de RBOB: {e}")
         raise
 
