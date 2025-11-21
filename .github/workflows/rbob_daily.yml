@@ -2,7 +2,7 @@ name: Gas — RBOB Diário
 
 on:
   schedule:
-    - cron: "12 9 * * *"   # 06:12 BRT (ajuste se quiser outro horário)
+    - cron: "8 9 * * *"   # 06:08 BRT
   workflow_dispatch:
     inputs:
       preview:
@@ -22,9 +22,6 @@ jobs:
       # ==== APIs ====
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      PIAPI_API_KEY: ${{ secrets.PIAPT_API_KEY }}
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
       # ==== Telegram ====
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -46,12 +43,12 @@ jobs:
 
       - name: Rodar rbob_daily.py
         run: |
-          mkdir -p pipelines/energy
+          mkdir -p pipelines/gas
 
-          OUT_FILE="pipelines/energy/rbob_daily.json"
+          OUT_FILE="pipelines/gas/rbob_daily.json"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/energy/rbob_daily.py --out "$OUT_FILE" --preview
+            python scripts/gas/rbob_daily.py --out "$OUT_FILE" --preview
           else
-            python scripts/energy/rbob_daily.py --out "$OUT_FILE"
+            python scripts/gas/rbob_daily.py --out "$OUT_FILE"
           fi
