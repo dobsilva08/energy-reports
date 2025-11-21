@@ -2,24 +2,35 @@ import os
 import json
 import argparse
 import requests
-from datetime import datetime, timedelta
 import time
+from datetime import datetime, timedelta
 
 # ------------------------------------------------------------------
-# Variáveis de ambiente
+# LLM Client com fallback (PIAPI, Groq, OpenAI, DeepSeek)
+# ------------------------------------------------------------------
+try:
+    # pressupondo que o arquivo fornecido por você está em llm_client.py na raiz
+    from llm_client import LLMClient
+except ImportError:
+    LLMClient = None
+
+# detecta se existe alguma chave de LLM configurada
+HAS_LLM_KEYS = any(
+    os.getenv(k)
+    for k in ["PIAPI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"]
+)
+
+# ------------------------------------------------------------------
+# Variáveis de ambiente base
 # ------------------------------------------------------------------
 FRED_API_KEY = os.getenv("FRED_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID_ENERGY = os.getenv("TELEGRAM_CHAT_ID_ENERGY")
 
-# Chave opcional da PIAPI (modo B – IA opcional)
-PIAPI_API_KEY = os.getenv("PIAPI_API_KEY")
-
 if FRED_API_KEY is None:
     raise RuntimeError("FRED_API_KEY não encontrado nas variáveis de ambiente.")
 if TELEGRAM_BOT_TOKEN is None or TELEGRAM_CHAT_ID_ENERGY is None:
     raise RuntimeError("TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID_ENERGY não configurados.")
-
 
 # ------------------------------------------------------------------
 # Telegram (HTML seguro)
@@ -37,7 +48,6 @@ def telegram_send_message(text: str):
     except Exception:
         print("Resposta bruta do Telegram:", r.text)
         return
-
     if not data.get("ok", False):
         print("Erro ao enviar mensagem Telegram:", data)
 
@@ -45,8 +55,7 @@ def telegram_send_message(text: str):
 # ------------------------------------------------------------------
 # FRED – Série de carvão (PPI – Coal)
 # ------------------------------------------------------------------
-FRED_SERIES_ID = "WPU051"  # Producer Price Index – Coal (1982=100)
-
+FRED_SERIES_ID = "WPU051"  # Producer Price Index: Coal (1982=100)
 
 def get_fred_series():
     url = "https://api.stlouisfed.org/fred/series/observations"
@@ -78,11 +87,9 @@ def get_fred_series():
 
 
 # ------------------------------------------------------------------
-# Versão TEMPLATE (sem IA) – texto fixo + regras simples
+# Métricas básicas a partir da série
 # ------------------------------------------------------------------
-def build_structured_report_template(obs):
-    today_str = datetime.utcnow().date().isoformat()
-
+def compute_metrics(obs):
     last = obs[-1]
     last_value = float(last["value"])
     last_date = last["date"]
@@ -91,207 +98,276 @@ def build_structured_report_template(obs):
         prev = obs[-2]
         prev_value = float(prev["value"])
         prev_date = prev["date"]
-        delta = last_value - prev_value
-        pct_change = (delta / prev_value) * 100 if prev_value != 0 else 0.0
+        delta = last_value - float(prev["value"])
+        pct = (delta / prev_value) * 100 if prev_value != 0 else 0.0
     else:
         prev_value = None
         prev_date = None
         delta = 0.0
-        pct_change = 0.0
+        pct = 0.0
 
-    # tendência simples
-    if pct_change > 0.5:
+    if pct > 0.5:
         trend = "alta"
-        exec_trend = (
-            "Índice de carvão em alta, sugerindo pressão de custos na cadeia energética."
-        )
-        curto_prazo = (
-            "Pressão altista no curto prazo, refletindo custos maiores e possível "
-            "repasse para cadeias intensivas em carvão."
-        )
-    elif pct_change < -0.5:
+    elif pct < -0.5:
         trend = "queda"
-        exec_trend = (
-            "Índice de carvão em queda, abrindo espaço para redução de custos industriais."
-        )
-        curto_prazo = (
-            "Pressão baixista no curto prazo, indicando alívio parcial de custos "
-            "para setores dependentes de carvão."
-        )
     else:
         trend = "estabilidade"
-        exec_trend = (
-            "Índice de carvão relativamente estável, sem choques de preço relevantes no dia."
-        )
-        curto_prazo = (
-            "Movimento mais lateralizado no curto prazo, com mercado ajustando "
-            "expectativas entre oferta, demanda e transição energética."
-        )
-
-    medio_prazo = (
-        "No médio prazo, a combinação de transição energética, políticas climáticas "
-        "e competitividade de outras fontes (gás, renováveis) deve limitar a "
-        "capacidade de alta estrutural do carvão, ainda que choques de oferta "
-        "regionais possam gerar picos temporários de preço."
-    )
-
-    # HEADER
-    header = (
-        f"📊 <b>Coal — {today_str} — Diário</b>\n\n"
-        f"<b>Relatório Diário — Índice de Carvão (PPI – WPU051)</b>\n"
-    )
-
-    # 1) Índice
-    bloco_1 = (
-        "\n1) <b>Índice de preços do carvão (PPI – Coal)</b>\n"
-        f"   • Índice mais recente: <b>{last_value:,.2f}</b>\n"
-        f"   • Data da última observação: {last_date}"
-    )
-    if prev_value is not None:
-        sinal = "+" if delta >= 0 else "-"
-        bloco_1 += (
-            f"\n   • Leitura anterior: {prev_value:,.2f} ({prev_date})"
-            f"\n   • Variação diária: {sinal}{abs(delta):,.2f} pontos "
-            f"({sinal}{abs(pct_change):.2f}%)"
-        )
-
-    bloco_2 = (
-        "\n\n2) <b>Estrutura de preços e tendência</b>\n"
-        f"   • A leitura mais recente aponta para um cenário de <b>{trend}</b> "
-        "no índice de preços do carvão.\n"
-        "   • Movimentos no PPI de carvão tendem a refletir contratos de fornecimento de "
-        "médio prazo, custos de extração, transporte e ajustes com grandes consumidores."
-    )
-
-    bloco_3 = (
-        "\n\n3) <b>Fatores de oferta</b>\n"
-        "   • Capacidade de mineração, custos trabalhistas e logística (portos, ferrovias) "
-        "são determinantes da oferta.\n"
-        "   • Questões regulatórias e ambientais podem restringir projetos de expansão."
-    )
-
-    bloco_4 = (
-        "\n\n4) <b>Fatores de demanda</b>\n"
-        "   • Demanda ligada à geração termoelétrica e à indústria pesada (aço, cimento).\n"
-        "   • Ciclos econômicos globais, em especial na Ásia, afetam diretamente o consumo."
-    )
-
-    bloco_5 = (
-        "\n\n5) <b>Transição energética e substituição</b>\n"
-        "   • Descarbonização e maior participação de renováveis reduzem gradualmente "
-        "o espaço do carvão na matriz.\n"
-        "   • Choques em outras fontes (gás, petróleo) podem gerar movimentos táticos "
-        "de volta ao carvão no curto prazo."
-    )
-
-    bloco_6 = (
-        "\n\n6) <b>FX (DXY) e condições financeiras</b>\n"
-        "   • Dólar mais forte tende a pressionar commodities cotadas em USD, "
-        "encarecendo a importação de carvão.\n"
-        "   • Juros mais altos reduzem investimentos em capacidade e logística."
-    )
-
-    bloco_7 = (
-        "\n\n7) <b>Notas de pesquisa e instituições</b>\n"
-        "   • Agências de energia apontam queda gradual na participação do carvão, "
-        "embora ainda partindo de uma base elevada em países em desenvolvimento.\n"
-        "   • Revisões de cenário acompanham crescimento global, política climática "
-        "e choques de oferta em outras fontes."
-    )
-
-    bloco_8 = (
-        "\n\n8) <b>Interpretação executiva</b>\n"
-        f"   • {exec_trend}\n"
-        "   • Custos de geração termoelétrica e indústria pesada seguem sensíveis "
-        "ao comportamento do índice.\n"
-        "   • Dólar e condições financeiras continuam importantes para o custo global de energia."
-    )
-
-    bloco_9 = (
-        "\n\n9) <b>Conclusão (curto e médio prazo)</b>\n"
-        f"   • <b>Curto prazo:</b> {curto_prazo}\n"
-        f"   • <b>Médio prazo:</b> {medio_prazo}"
-    )
-
-    bloco_10 = "\n\n<i>Modo: template (sem LLM)</i>"
-
-    html_text = (
-        header
-        + bloco_1
-        + bloco_2
-        + bloco_3
-        + bloco_4
-        + bloco_5
-        + bloco_6
-        + bloco_7
-        + bloco_8
-        + bloco_9
-        + bloco_10
-    ).strip()
 
     return {
-        "html": html_text,
         "last_value": last_value,
         "last_date": last_date,
         "prev_value": prev_value,
         "prev_date": prev_date,
         "delta": delta,
-        "pct_change": pct_change,
+        "pct_change": pct,
         "trend": trend,
-        "provider": "template",
-        "llm_used": False,
     }
 
 
 # ------------------------------------------------------------------
-# (FUTURO) Versão com IA – pronta para integrar PIAPI
+# TEMPLATE (sem IA) – modo fallback
 # ------------------------------------------------------------------
-def build_structured_report_llm(obs):
-    """
-    Aqui entra a integração REAL com a PIAPI.
+def build_structured_report_template(metrics):
+    today_str = datetime.utcnow().date().isoformat()
 
-    Neste momento, esta função só reusa o template para não quebrar nada.
-    Quando você quiser plugar a IA de verdade, usamos PIAPI_API_KEY aqui
-    (por exemplo, copiando o padrão que você já tiver no relatório de Oil).
+    last_value = metrics["last_value"]
+    last_date = metrics["last_date"]
+    prev_value = metrics["prev_value"]
+    prev_date = metrics["prev_date"]
+    delta = metrics["delta"]
+    pct_change = metrics["pct_change"]
+    trend = metrics["trend"]
 
-    Retorna o mesmo formato de dict da função de template.
-    """
-    # TODO: implementar chamada real à PIAPI usando PIAPI_API_KEY
-    # Por enquanto, apenas reaproveita o template:
-    base = build_structured_report_template(obs)
-    base["provider"] = "piapi (placeholder)"
-    base["llm_used"] = False
-    # opcionalmente mudar o rodapé para indicar placeholder
-    base["html"] = base["html"].replace(
-        "Modo: template (sem LLM)",
-        "Provedor LLM: piapi • (placeholder, sem chamada real)",
+    if trend == "alta":
+        exec_trend = (
+            "Índice de carvão em alta, sugerindo pressão de custos na cadeia energética."
+        )
+        curto_prazo = (
+            "Pressão altista no curto prazo, com repasse de custos para cadeias intensivas em carvão."
+        )
+    elif trend == "queda":
+        exec_trend = (
+            "Índice de carvão em queda, abrindo espaço para redução de custos industriais."
+        )
+        curto_prazo = (
+            "Pressão baixista no curto prazo, com algum alívio para setores dependentes de carvão."
+        )
+    else:
+        exec_trend = (
+            "Índice de carvão relativamente estável, sem choques de preço relevantes no dia."
+        )
+        curto_prazo = (
+            "Movimento lateralizado no curto prazo, com mercado equilibrando oferta, demanda e transição energética."
+        )
+
+    medio_prazo = (
+        "No médio prazo, políticas climáticas, descarbonização e competitividade de gás e renováveis "
+        "tendem a limitar a alta estrutural do carvão, ainda que choques regionais possam gerar picos temporários."
     )
-    return base
+
+    texto = f"📊 <b>Coal — {today_str} — Diário</b>\n\n"
+    texto += "<b>Relatório Diário — Índice de Carvão (PPI – WPU051)</b>\n\n"
+
+    # 1)
+    texto += "1) <b>Índice PPI – Coal</b>\n"
+    texto += f"   • Valor mais recente: <b>{last_value:,.2f}</b>\n"
+    texto += f"   • Data: {last_date}\n"
+    if prev_value is not None:
+        sinal = "+" if delta >= 0 else "-"
+        texto += f"   • Leitura anterior: {prev_value:,.2f} ({prev_date})\n"
+        texto += (
+            f"   • Variação diária: {sinal}{abs(delta):,.2f} pontos "
+            f"({sinal}{abs(pct_change):.2f}%)\n"
+        )
+
+    # 2)
+    texto += "\n2) <b>Estrutura e tendência</b>\n"
+    texto += f"   • Cenário atual: <b>{trend}</b>.\n"
+    texto += (
+        "   • O índice reflete contratos de fornecimento, custos de extração e logística.\n"
+    )
+
+    # 3)
+    texto += "\n3) <b>Oferta</b>\n"
+    texto += (
+        "   • Capacidade de mineração, custos trabalhistas e restrições regulatórias "
+        "influenciam a oferta de carvão.\n"
+    )
+
+    # 4)
+    texto += "\n4) <b>Demanda</b>\n"
+    texto += (
+        "   • Determinada por geração termoelétrica, aço, cimento e demais indústrias intensivas em energia.\n"
+    )
+
+    # 5)
+    texto += "\n5) <b>Transição energética</b>\n"
+    texto += (
+        "   • A migração gradual para gás e renováveis reduz estruturalmente a participação do carvão.\n"
+    )
+
+    # 6)
+    texto += "\n6) <b>FX (DXY) e condições financeiras</b>\n"
+    texto += (
+        "   • Um dólar mais forte tende a pressionar commodities energéticas para países importadores.\n"
+    )
+
+    # 7)
+    texto += "\n7) <b>Instituições e pesquisas</b>\n"
+    texto += (
+        "   • Agências de energia projetam queda gradual no uso de carvão, embora partindo de base ainda elevada.\n"
+    )
+
+    # 8)
+    texto += "\n8) <b>Interpretação executiva</b>\n"
+    texto += f"   • {exec_trend}\n"
+    texto += (
+        "   • Setores eletrointensivos permanecem sensíveis a choques de preço no índice de carvão.\n"
+    )
+
+    # 9)
+    texto += "\n9) <b>Conclusão (curto e médio prazo)</b>\n"
+    texto += f"   • <b>Curto prazo:</b> {curto_prazo}\n"
+    texto += f"   • <b>Médio prazo:</b> {medio_prazo}\n"
+
+    # 10) rodapé
+    texto += "\n<i>Modo: template (sem LLM)</i>"
+
+    return {
+        "html": texto,
+        **metrics,
+        "provider": "template",
+        "llm_used": False,
+        "llm_time": None,
+    }
 
 
 # ------------------------------------------------------------------
-# Escolhe entre IA (se disponível) e template
+# Versão com IA REAL — usando LLMClient (PIAPI / Groq / OpenAI / DeepSeek)
+# ------------------------------------------------------------------
+def build_structured_report_llm(metrics):
+    """
+    Gera o relatório usando LLMClient, em português, formato HTML compatível com Telegram.
+    Usa fallback automático entre PIAPI, Groq, OpenAI e DeepSeek.
+    """
+    if LLMClient is None:
+        raise RuntimeError("LLMClient não disponível (módulo llm_client não encontrado).")
+
+    client = LLMClient()
+
+    today_str = datetime.utcnow().date().isoformat()
+
+    # compacta algumas observações para contexto (últimos 10 pontos)
+    # Aqui usamos só as métricas calculadas (valor atual, anterior, variação, tendência)
+    last_value = metrics["last_value"]
+    last_date = metrics["last_date"]
+    prev_value = metrics["prev_value"]
+    prev_date = metrics["prev_date"]
+    delta = metrics["delta"]
+    pct_change = metrics["pct_change"]
+    trend = metrics["trend"]
+
+    system_prompt = (
+        "Você é um analista de energia especializado em carvão e mercado de energia global.\n"
+        "Escreva em português do Brasil, de forma clara, técnica e executiva.\n"
+        "Saída obrigatória em HTML simples, compatível com Telegram, usando apenas <b>, <i> e quebras de linha.\n"
+        "Não use listas HTML (<ul>, <ol>), apenas texto com '1)', '2)' etc.\n"
+        "Não inclua tags <html>, <body> ou cabeçalho de documento, apenas o conteúdo."
+    )
+
+    # monta prompt com os dados quantitativos
+    resumo_dados = f"""
+Dados da série PPI – Coal (WPU051):
+
+- Valor mais recente: {last_value:.2f} (data {last_date})
+- Valor anterior: {prev_value if prev_value is not None else 'N/A'} (data {prev_date if prev_date else 'N/A'})
+- Variação absoluta: {delta:.2f}
+- Variação percentual: {pct_change:.2f}%
+- Tendência simples: {trend}
+- Data de referência do relatório: {today_str}
+"""
+
+    user_prompt = (
+        resumo_dados
+        + """
+
+Com base nesses dados, escreva um RELATÓRIO DIÁRIO de carvão com exatamente esta estrutura:
+
+1) Cabeçalho:
+   - Primeira linha: 📊 <b>Coal — AAAA-MM-DD — Diário</b>
+   - Segunda linha: <b>Relatório Diário — Índice de Carvão (PPI – WPU051)</b>
+
+2) Seções numeradas de 1 a 9, em texto corrido, seguindo o padrão:
+   1) Índice PPI – Coal (nível atual, variação, leitura anterior)
+   2) Estrutura de preços e tendência
+   3) Fatores de oferta
+   4) Fatores de demanda
+   5) Transição energética e substituição
+   6) FX (DXY) e condições financeiras
+   7) Notas de pesquisa e instituições
+   8) Interpretação executiva (bullet points em texto, começando com '•')
+   9) Conclusão (curto e médio prazo)
+
+3) No final, inclua UMA linha de rodapé:
+   <i>Provedor LLM: {provider} • X.Xs</i>
+
+Onde {provider} deve ser o nome do provider ativo (por exemplo piapi, groq, openai, deepseek)
+e X.X é apenas um placeholder; o tempo real será ajustado pelo código.
+
+Regras:
+- Use sempre quebras de linha '\\n' entre parágrafos.
+- Use <b> para destacar termos importantes.
+- Não coloque markdown com **asteriscos**; use apenas HTML.
+- Não invente dados de preço específicos além dos que foram fornecidos, mas pode interpretar tendências.
+"""
+    )
+
+    t0 = time.time()
+    raw_html = client.generate(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=0.35,
+        max_tokens=1800,
+    )
+    elapsed = time.time() - t0
+    provider = client.active_provider or "desconhecido"
+
+    # garante texto "limpo"
+    html = raw_html.strip()
+
+    # adiciona/ajusta rodapé
+    rodape = f"\n\n<i>Provedor LLM: {provider} • {elapsed:.1f}s</i>"
+    if "Provedor LLM:" in html:
+        # se o modelo já colocou algo, apenas anexamos a linha padrão no final
+        html += rodape
+    else:
+        html += rodape
+
+    return {
+        "html": html,
+        **metrics,
+        "provider": provider,
+        "llm_used": True,
+        "llm_time": elapsed,
+    }
+
+
+# ------------------------------------------------------------------
+# Escolha entre IA (se disponível) e template
 # ------------------------------------------------------------------
 def build_structured_report(obs):
-    """
-    Modo B — IA opcional:
+    metrics = compute_metrics(obs)
 
-    - Se PIAPI_API_KEY existir:
-        tenta usar LLM (build_structured_report_llm).
-        se falhar → cai para template.
-    - Se não existir:
-        usa somente o template.
-    """
-    if PIAPI_API_KEY:
+    if HAS_LLM_KEYS and LLMClient is not None:
         try:
-            print("PIAPI_API_KEY encontrada — (placeholder) usando caminho LLM...")
-            return build_structured_report_llm(obs)
+            print("LLM disponível – gerando relatório com IA (LLMClient)...")
+            return build_structured_report_llm(metrics)
         except Exception as e:
-            print("Erro ao usar PIAPI, caindo para template:", e)
-            return build_structured_report_template(obs)
+            print("Erro ao usar LLM, caindo para template:", e)
+            return build_structured_report_template(metrics)
     else:
-        print("PIAPI_API_KEY não configurada — usando template (sem IA).")
-        return build_structured_report_template(obs)
+        print("Nenhuma chave de LLM encontrada ou LLMClient indisponível – usando template.")
+        return build_structured_report_template(metrics)
 
 
 # ------------------------------------------------------------------
@@ -309,7 +385,7 @@ def main():
         print("🟦 Coletando dados do FRED...")
         obs = get_fred_series()
 
-        print("🟩 Construindo relatório (IA opcional)...")
+        print("🟩 Construindo relatório estruturado (IA opcional)...")
         report = build_structured_report(obs)
         html_text = report["html"]
 
@@ -326,7 +402,7 @@ def main():
 
         print(f"🟧 JSON salvo em {args.out}")
 
-        print("📨 Enviando relatório único para o Telegram...")
+        print("📨 Enviando relatório para o Telegram (mensagem única)...")
         telegram_send_message(html_text)
 
         end = time.time()
