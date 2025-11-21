@@ -108,7 +108,7 @@ def compute_metrics(obs):
 
 
 # ------------------------------------------------------------------
-# Relatório — Template sem IA
+# Relatório — Template em tópicos (sem IA)
 # ------------------------------------------------------------------
 def build_report(metrics):
     today = datetime.utcnow().strftime("%Y-%m-%d")
@@ -121,40 +121,99 @@ def build_report(metrics):
     pct = metrics["pct_change"]
     trend = metrics["trend"]
 
-    # Ajusta narrativa
+    # Narrativa dinâmica conforme a tendência
     if trend == "alta":
-        comentario = "pressão altista no curto prazo no mercado asiático de LNG."
+        comentario_curto_prazo = (
+            "Pressão altista no curto prazo, refletindo demanda firme por LNG no mercado asiático "
+            "ou ajustes na oferta global."
+        )
+        interpretacao_linha_1 = (
+            "JKM LNG em alta, sugerindo ambiente de preços mais apertados para importadores de gás na Ásia."
+        )
     elif trend == "queda":
-        comentario = "pressão baixista no curto prazo, aliviando custos de importadores asiáticos."
+        comentario_curto_prazo = (
+            "Pressão baixista no curto prazo, com oferta mais confortável ou demanda temporariamente mais fraca."
+        )
+        interpretacao_linha_1 = (
+            "JKM LNG em queda, indicando alívio parcial nos custos de importação de gás para a Ásia."
+        )
     else:
-        comentario = "movimento de estabilidade com balanço entre oferta e demanda."
+        comentario_curto_prazo = (
+            "Curto prazo marcado por relativa estabilidade, com oscilações ligadas a clima, logística "
+            "e ajustes marginais de oferta e demanda."
+        )
+        interpretacao_linha_1 = (
+            "JKM LNG em patamar estável, sinalizando balanço relativamente equilibrado entre oferta e demanda."
+        )
+
+    interpretacao_linha_2 = (
+        "Importadores asiáticos seguem sensíveis a choques de preço no JKM, com impacto direto no custo de "
+        "geração elétrica e em contratos indexados ao spot."
+    )
+
+    medio_prazo = (
+        "No médio prazo, a trajetória do JKM LNG depende da expansão de terminais de liquefação, "
+        "contratos de longo prazo, substituição entre gás e outras fontes (carvão, renováveis) e "
+        "da dinâmica macroeconômica nas principais economias asiáticas."
+    )
 
     sinal = "+" if delta >= 0 else "-"
 
-    report = f"""
-📊 <b>Gas — JKM LNG — {today} — Diário</b>
+    # Cabeçalho
+    report = f"""📊 <b>Gas — JKM LNG — {today} — Diário</b>
 
-<b>1) Preço Spot (JKM LNG)</b>
-• Última leitura: <b>{last:.2f} USD/MMBtu</b>
-• Data: {last_date}
+<b>Relatório Diário — Preço spot JKM LNG (PNGASJPUSDM)</b>
+
+<b>1) Preço spot JKM LNG</b>
+• Último valor: <b>{last:.2f} USD/MMBtu</b>
+• Data da última observação: {last_date}
 """
 
+    # Se tiver leitura anterior, adiciona
     if prev is not None:
-        report += f"• Anterior: {prev:.2f} USD/MMBtu ({prev_date})\n"
-        report += f"• Variação diária: {sinal}{abs(delta):.2f} USD/MMBtu ({sinal}{abs(pct):.2f}%)\n"
+        report += (
+            f"• Leitura anterior: {prev:.2f} USD/MMBtu ({prev_date})\n"
+            f"• Variação diária: {sinal}{abs(delta):.2f} USD/MMBtu "
+            f"({sinal}{abs(pct):.2f}%)\n"
+        )
 
+    # Demais tópicos
     report += f"""
-<b>2) Interpretação Executiva</b>
-• O mercado apresenta {comentario}
+<b>2) Estrutura de mercado e spreads</b>
+• O JKM é referência para precificação de LNG no mercado asiático, com spreads em relação a Henry Hub, TTF
+  e outros hubs indicando competitividade relativa das regiões.
 
-<b>3) Tendências e Drivers</b>
-• Clima na Ásia (demanda de geração elétrica)
-• Custos logísticos e disponibilidade de navios LNG
-• Oferta global de liquefação (EUA, Qatar, Austrália)
-• Arbitragem entre JKM, TTF (Europa) e Henry Hub (EUA)
+<b>3) Oferta global de LNG</b>
+• A oferta depende de projetos de liquefação, disponibilidade de shipping (navios de LNG) e eventuais
+  interrupções operacionais em plantas produtoras.
 
-<b>4) Conclusão</b>
-• Cenário de curto prazo: {trend}.
+<b>4) Demanda asiática</b>
+• A demanda é guiada por geração termoelétrica, consumo industrial e clima (ondas de frio ou calor),
+  principalmente em economias como Japão, Coreia do Sul e China.
+
+<b>5) Relação com TTF, Henry Hub e outros hubs</b>
+• Diferenças de preço entre JKM, TTF (Europa) e Henry Hub (EUA) sinalizam incentivos de arbitragem via LNG,
+  redirecionando cargas entre continentes.
+
+<b>6) FX, shipping e custos logísticos</b>
+• Custos de frete marítimo, disponibilidade de navios e condições de câmbio impactam o preço efetivo
+  pago pelos importadores de LNG.
+
+<b>7) Geopolítica e riscos</b>
+• Tensões em regiões produtoras, disputas de rotas marítimas e sanções podem afetar a disponibilidade de
+  gás e o fluxo de cargas para a Ásia.
+
+<b>8) Notas de pesquisa e instituições</b>
+• Relatórios de agências de energia, bancos e casas de análise monitoram expansão de capacidade de LNG,
+  contratos de longo prazo e transição energética na região.
+
+<b>9) Interpretação executiva</b>
+• {interpretacao_linha_1}
+• {interpretacao_linha_2}
+
+<b>10) Conclusão (curto e médio prazo)</b>
+• Curto prazo: {comentario_curto_prazo}
+• Médio prazo: {medio_prazo}
 """
 
     return report.strip()
