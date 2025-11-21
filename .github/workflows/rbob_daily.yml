@@ -2,13 +2,13 @@ name: Gas — RBOB Diário
 
 on:
   schedule:
-    - cron: "12 9 * * *"   # 06:12 BRT
+    - cron: "12 9 * * *"   # 06:12 BRT (ajuste se quiser outro horário)
   workflow_dispatch:
     inputs:
       preview:
         type: boolean
         default: false
-        description: "Enviar para TESTE (preview)"
+        description: "Enviar relatório em modo TESTE"
 
 concurrency:
   group: gas-rbob-daily
@@ -19,9 +19,16 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # ==== APIs ====
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PIAPI_API_KEY: ${{ secrets.PIAPT_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+      # ==== Telegram ====
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_GAS_RBOB }}
-      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
 
     steps:
       - name: Checkout
@@ -35,15 +42,16 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Rodar rbob_daily.py
         run: |
+          mkdir -p pipelines/energy
+
+          OUT_FILE="pipelines/energy/rbob_daily.json"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/gas/rbob_daily.py --preview
+            python scripts/energy/rbob_daily.py --out "$OUT_FILE" --preview
           else
-            python scripts/gas/rbob_daily.py
+            python scripts/energy/rbob_daily.py --out "$OUT_FILE"
           fi
