@@ -21,7 +21,7 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_URANIUM }}
-      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}      # << OBRIGATÓRIO
 
     steps:
       - name: Checkout
@@ -44,9 +44,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
             python scripts/energy/uranium_daily.py \
-              --out pipelines/energy/uranium_daily_preview.json \
-              --preview
+              --out pipelines/energy/uranium_daily_preview.csv \
+              --start 1990-01-01
           else
             python scripts/energy/uranium_daily.py \
-              --out pipelines/energy/uranium_daily.json
+              --out pipelines/energy/uranium_daily.csv \
+              --start 1990-01-01
           fi
