@@ -20,7 +20,6 @@ jobs:
 
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      # ajuste o nome do secret abaixo se quiser um ID específico pra urânio
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_URANIUM }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
 
@@ -44,7 +43,10 @@ jobs:
       - name: Rodar uranium_daily.py
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/energy/uranium_daily.py --preview
+            python scripts/energy/uranium_daily.py \
+              --out pipelines/energy/uranium_daily_preview.json \
+              --preview
           else
-            python scripts/energy/uranium_daily.py
+            python scripts/energy/uranium_daily.py \
+              --out pipelines/energy/uranium_daily.json
           fi
