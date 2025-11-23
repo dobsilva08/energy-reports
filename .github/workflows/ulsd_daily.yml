@@ -23,7 +23,7 @@ jobs:
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
 
-      # ==== Telegram (reservado para uso futuro, se precisar) ====
+      # ==== Telegram (reservado se quiser usar depois) ====
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
 
@@ -52,10 +52,10 @@ jobs:
             python scripts/gas/ulsd_daily.py \
               --out pipelines/gas/ulsd_daily_preview.csv \
               --start 2003-01-01 \
-              --series-id DDFUELUSGASDOWN
+              --series-id DHOILUSGULF
           else
             python scripts/gas/ulsd_daily.py \
               --out pipelines/gas/ulsd_daily.csv \
               --start 2003-01-01 \
-              --series-id DDFUELUSGASDOWN
+              --series-id DHOILUSGULF
           fi
