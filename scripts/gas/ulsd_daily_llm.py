@@ -157,7 +157,7 @@ def main():
         return
 
     numero = title_counter(args.counter_path, key="diario_ulsd")
-    titulo = f"📊 Dados de Mercado — ULSD / Heating Oil — {today_brt_str()} — Diário — Nº {numero}"
+    titulo = f"🚚 Diesel ULSD — Relatório Diário — {today_brt_str()} — Nº {numero}"
 
     contexto = build_context_block(series_id=args.series_id, start=args.start)
 
