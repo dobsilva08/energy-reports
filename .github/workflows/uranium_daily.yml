@@ -20,7 +20,7 @@ jobs:
 
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_URANIUM }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}   # <-- CORRIGIDO
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
 
     steps:
