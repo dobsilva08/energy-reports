@@ -78,7 +78,7 @@ Use os dados:
     dt = time.time() - t0
 
     num = increment_counter("data/counters.json", "oil_daily")
-    titulo = f"📊 Petróleo (WTI+Brent) — {today_brt()} — Diário — Nº {num}"
+    titulo = f"🛢️ Petróleo — Relatório Diário (Brent & WTI) — {today_brt()} — Diário — Nº {num}"
 
     final = f"<b>{html.escape(titulo)}</b>\n\n{texto}\n\n<i>LLM: {llm.active_provider} · {dt:.1f}s</i>"
     print(final)
