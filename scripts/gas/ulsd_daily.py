@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-Baixa preços diários de ULSD / Heating Oil (HO1 proxy) usando o FRED.
+Baixa preços de ULSD / Heating Oil (HO proxy) usando o FRED.
 Série padrão:
-  - DDFUELUSGASDOWN = Ultra-Low Sulfur Diesel (ULSD) NY Harbor Spot Price
-
+  - DHOILUSGULF (ou outra definida no args)
 Requisitos:
- - FRED_API_KEY (já existe no repositório)
+ - FRED_API_KEY
  - requests, pandas
-
 Saída:
  - CSV com colunas: date, price, source
 """
@@ -21,16 +19,17 @@ import pandas as pd
 FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
-def fetch_ulsd_from_fred(api_key: str,
-                         series_id: str = "DDFUELUSGASDOWN",
-                         observation_start: str = "2003-01-01") -> pd.DataFrame:
+def fetch_ulsd_from_fred(
+    api_key: str,
+    series_id: str = "DHOILUSGULF",
+    observation_start: str = "2003-01-01",
+) -> pd.DataFrame:
 
     params = {
         "series_id": series_id,
         "api_key": api_key,
         "file_type": "json",
         "observation_start": observation_start,
-        "frequency": "d",
     }
 
     resp = requests.get(FRED_BASE_URL, params=params, timeout=30)
@@ -53,13 +52,11 @@ def fetch_ulsd_from_fred(api_key: str,
             continue
 
         date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        rows.append(
-            {
-                "date": date,
-                "price": price,
-                "source": f"FRED:{series_id}",
-            }
-        )
+        rows.append({
+            "date": date,
+            "price": price,
+            "source": f"FRED:{series_id}"
+        })
 
     df = pd.DataFrame(rows)
     df = df.sort_values("date").reset_index(drop=True)
@@ -67,17 +64,21 @@ def fetch_ulsd_from_fred(api_key: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Baixa preços diários de ULSD (Heating Oil).")
-    parser.add_argument("--out", required=True, help="Caminho do CSV de saída")
+    parser = argparse.ArgumentParser(description="Baixa preços de ULSD / Heating Oil via FRED.")
+    parser.add_argument(
+        "--out",
+        required=True,
+        help="Caminho do CSV de saída"
+    )
     parser.add_argument(
         "--series-id",
-        default=os.environ.get("ULSD_FRED_SERIES_ID", "DDFUELUSGASDOWN"),
-        help="ID da série no FRED (padrão: DDFUELUSGASDOWN)",
+        default=os.environ.get("ULSD_FRED_SERIES_ID", "DHOILUSGULF"),
+        help="ID da série no FRED (default: DHOILUSGULF)."
     )
     parser.add_argument(
         "--start",
         default="2003-01-01",
-        help="Data inicial (YYYY-MM-DD)",
+        help="Data inicial (YYYY-MM-DD)"
     )
 
     args = parser.parse_args()
