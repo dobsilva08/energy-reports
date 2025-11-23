@@ -166,7 +166,7 @@ def build_report(metrics):
     )
 
     # Cabeçalho
-    texto = f"📊 <b>Gas — RBOB — {today_str} — Diário</b>\n\n"
+    texto = f"⛽ <b>Gasolina RBOB — Relatório Diário — {today_str} — Diário</b>\n\n"
     texto += "<b>Relatório Diário — Preço RBOB (DRGASLA — Los Angeles)</b>\n\n"
 
     # 1) Preço RBOB
