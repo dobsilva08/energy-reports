@@ -160,7 +160,7 @@ def build_report(metrics):
     sinal = "+" if delta >= 0 else "-"
 
     # Cabeçalho
-    report = f"""📊 <b>Gas — JKM LNG — {today} — Diário</b>
+    report = f"""🌏 GNL Ásia — Relatório Diário (JKM LNG) — {today} — Diário</b>
 
 <b>Relatório Diário — Preço spot JKM LNG (PNGASJPUSDM)</b>
 
