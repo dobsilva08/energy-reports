@@ -19,9 +19,13 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_GAS_ULSD }}
+      # ==== APIs ====
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+
+      # ==== Telegram (reservado para uso futuro, se precisar) ====
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
 
     steps:
       - name: Checkout
@@ -42,8 +46,16 @@ jobs:
 
       - name: Rodar ulsd_daily.py
         run: |
+          mkdir -p pipelines/gas
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.preview }}" = "true" ]; then
-            python scripts/gas/ulsd_daily.py --preview
+            python scripts/gas/ulsd_daily.py \
+              --out pipelines/gas/ulsd_daily_preview.csv \
+              --start 2003-01-01 \
+              --series-id DDFUELUSGASDOWN
           else
-            python scripts/gas/ulsd_daily.py
+            python scripts/gas/ulsd_daily.py \
+              --out pipelines/gas/ulsd_daily.csv \
+              --start 2003-01-01 \
+              --series-id DDFUELUSGASDOWN
           fi
