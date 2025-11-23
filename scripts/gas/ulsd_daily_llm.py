@@ -38,7 +38,7 @@ def today_brt_str() -> str:
     return f"{now.day} de {meses[now.month-1]} de {now.year}"
 
 
-def build_context_block(series_id: str = "DHOILUSGULF", start: str = "2003-01-01") -> str:
+def build_context_block(series_id: str = "DDFUELUSGULF", start: str = "2003-01-01") -> str:
     """
     Busca ULSD no FRED e monta bloco de contexto factual
     (último preço, variação, faixa histórica, etc.) para o LLM.
@@ -142,7 +142,10 @@ def main():
     parser.add_argument("--counter-path", default="data/counters.json")
     parser.add_argument("--sent-path", default=None)
     parser.add_argument("--provider", default=None)
-    parser.add_argument("--series-id", default=os.environ.get("ULSD_FRED_SERIES_ID", "DHOILUSGULF"))
+    parser.add_argument(
+        "--series-id",
+        default=os.environ.get("ULSD_FRED_SERIES_ID", "DDFUELUSGULF"),
+    )
     parser.add_argument("--start", default="2003-01-01")
     args = parser.parse_args()
 
