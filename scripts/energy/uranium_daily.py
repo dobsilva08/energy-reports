@@ -7,6 +7,7 @@ Série padrão:
 
 Requisitos:
   - FRED_API_KEY configurada nos secrets do GitHub
+  - TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID_ENERGY (para envio opcional)
   - requests, pandas instalados
 
 Saída:
@@ -82,6 +83,30 @@ def fetch_uranium_from_fred(
     return df
 
 
+def send_telegram_message(text: str) -> None:
+    """Envia uma mensagem simples para o Telegram (se envs estiverem configuradas)."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID_ENERGY") or os.getenv("TELEGRAM_CHAT_ID")
+
+    if not token or not chat_id:
+        print("[URANIUM/TELEGRAM] TELEGRAM_BOT_TOKEN ou CHAT_ID não configurados. Pulando envio.")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+    }
+
+    try:
+        resp = requests.post(url, json=payload, timeout=15)
+        resp.raise_for_status()
+        print("[URANIUM/TELEGRAM] Mensagem enviada com sucesso.")
+    except Exception as e:
+        print(f"[URANIUM/TELEGRAM] Falha ao enviar mensagem: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Baixa preço spot de Urânio (U3O8) via FRED.")
     parser.add_argument(
@@ -120,6 +145,19 @@ def main():
     df.to_csv(out_path, index=False)
     print(f"[URANIUM/FRED] CSV salvo em {out_path}")
     print(f"[URANIUM/FRED] Linhas: {len(df)} — Período {df['date'].min()} → {df['date'].max()}")
+
+    # ---- Enviar resumo pro Telegram ----
+    last_row = df.iloc[-1]
+    last_date = last_row["date"]
+    last_price = last_row["price"]
+
+    msg = (
+        "📊 *Uranium — Relatório Diário*\n\n"
+        f"Último preço: *{last_price:.2f} USD/lb* em *{last_date}*.\n\n"
+        f"Período baixado: {df['date'].min()} → {df['date'].max()}\n"
+        f"Total de observações: {len(df)}"
+    )
+    send_telegram_message(msg)
 
 
 if __name__ == "__main__":
