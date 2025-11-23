@@ -90,7 +90,8 @@ def main():
         return
 
     numero = title_counter(args.counter_path, key="diario_gas")
-    titulo = f"📊 Dados de Mercado — Natural Gas (Henry Hub) — {today_brt_str()} — Diário — Nº {numero}"
+    titulo = f"🔥 Gás Natural — Relatório Diário (Henry Hub) — {today_brt_str()} — Nº {numero}"
+
 
     contexto = build_context_block()
     t0 = time.time()
