@@ -19,9 +19,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}   # <-- CORRIGIDO
+      # ==== APIs ====
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+
+      # ==== Telegram ====
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
 
     steps:
       - name: Checkout
