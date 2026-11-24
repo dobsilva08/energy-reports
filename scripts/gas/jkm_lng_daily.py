@@ -33,7 +33,7 @@ def telegram_send_message(text: str) -> None:
     try:
         data = r.json()
         if not data.get("ok", False):
-            print("Erro ao enviar mensagem ao Telegram:", data)
+            raise RuntimeError(f"Telegram API error: {data}")
     except Exception:
         print("Resposta inesperada do Telegram:", r.text)
 
