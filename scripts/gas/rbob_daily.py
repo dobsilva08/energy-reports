@@ -38,7 +38,7 @@ def telegram_send_message(text: str) -> None:
         return
 
     if not data.get("ok", False):
-        print("Erro ao enviar mensagem para Telegram:", data)
+        raise RuntimeError(f"Telegram API error: {data}")
 
 
 # ------------------------------------------------------------------
