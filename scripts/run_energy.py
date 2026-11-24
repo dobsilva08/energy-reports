@@ -50,11 +50,16 @@ def notify_failure(failed):
     import requests
     msg = "⚠️ <b>Energy Reports — execução com falhas</b>\n\n" + "\n".join("• " + x for x in failed)
     try:
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat, "text": msg, "parse_mode": "HTML"}, timeout=30)
-        r.raise_for_status()
-        if not r.json().get("ok"):
-            raise RuntimeError(r.text)
+        payload = {"chat_id": chat, "text": msg, "parse_mode": "HTML"}
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=30)
+        data = r.json()
+        migrated = data.get("parameters", {}).get("migrate_to_chat_id") if isinstance(data, dict) else None
+        if migrated:
+            payload["chat_id"] = migrated
+            r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload, timeout=30)
+            data = r.json()
+        if r.status_code >= 400 or not data.get("ok"):
+            raise RuntimeError(str(data))
     except Exception as exc:
         print(f"Failure-summary Telegram notification failed: {exc}", flush=True)
 
