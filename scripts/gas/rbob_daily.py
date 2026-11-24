@@ -30,7 +30,7 @@ def telegram_send_message(text: str) -> None:
         "text": text,
         "parse_mode": "HTML",
     }
-    r = requests.post(url, data=payload)
+    r = requests.post(url, data=payload, timeout=30)\n    r.raise_for_status()
     try:
         data = r.json()
     except Exception:
@@ -294,7 +294,7 @@ def main():
 
         # salva JSON
         out_path = args.out
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
 
