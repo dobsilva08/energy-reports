@@ -67,8 +67,12 @@ def send_to_telegram(text: str, preview: bool = False) -> None:
         payload={"chat_id":chat,"text":chunk,"disable_web_page_preview":True}
         if thread_id: payload["message_thread_id"]=thread_id
         response=requests.post(url,json=payload,timeout=30)
-        if response.status_code >= 400:
-            raise RuntimeError(f"Telegram HTTP {response.status_code}: {response.text[:1000]}")
         data=response.json()
-        if not data.get("ok"): raise RuntimeError(f"Telegram API error: {data}")
+        migrated_id=data.get("parameters", {}).get("migrate_to_chat_id") if isinstance(data,dict) else None
+        if migrated_id:
+            payload["chat_id"]=migrated_id
+            response=requests.post(url,json=payload,timeout=30)
+            data=response.json()
+        if response.status_code >= 400 or not data.get("ok"):
+            raise RuntimeError(f"Telegram API error: {data}")
     print(f"Telegram sent ({len(chunks)} message(s)).")
