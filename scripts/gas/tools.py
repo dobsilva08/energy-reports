@@ -2,7 +2,8 @@
 import os
 import json
 import re
-import html\nimport requests
+import html
+import requests
 from datetime import datetime, timezone, timedelta
 
 try:
