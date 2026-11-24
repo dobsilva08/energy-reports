@@ -1,4 +1,4 @@
-name: Energy Reports — Central Runner
+name: Energy Reports — Daily Central Runner
 on:
   pull_request:
     branches: [main]
@@ -6,19 +6,14 @@ on:
     branches: [simplify-energy-workflow]
   schedule:
     - cron: "0 9 * * *" # Daily 06:00 BRT
-    - cron: "0 10 * * Thu" # Weekly EIA 07:00 BRT
   workflow_dispatch:
     inputs:
       preview:
         description: "Preview (test chat where supported; skip direct-send assets)"
         type: boolean
         default: true
-      weekly_only:
-        description: "Run only weekly EIA inventories"
-        type: boolean
-        default: false
 concurrency:
-  group: energy-central
+  group: energy-central-daily
   cancel-in-progress: false
 jobs:
   reports:
@@ -58,25 +53,9 @@ jobs:
       - name: Preview validation for pull requests
         if: ${{ github.event_name == 'pull_request' }}
         run: python scripts/run_energy.py --preview
-      - name: Weekly EIA
-        if: ${{ github.event.schedule == '0 10 * * Thu' || inputs.weekly_only == true }}
-        run: python scripts/run_energy.py --weekly-only ${{ inputs.preview == true && '--preview' || '' }}
       - name: Daily assets
-        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.weekly_only != true) }}
-        run: python scripts/run_energy.py ${{ inputs.preview == true && '--preview' || '' }}
-      - name: Send weekly inventory messages and charts
-        if: ${{ github.event.schedule == '0 10 * * Thu' && success() }}
-        run: |
-          for f in /tmp/telegram_petroleum_crude.txt /tmp/telegram_petroleum_products.txt /tmp/telegram_gas_storage.txt /tmp/telegram_energy_summary.txt; do
-            curl --fail --silent --show-error -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" -d chat_id="${TELEGRAM_CHAT_ID_ENERGY}" -d parse_mode=Markdown --data-urlencode "text@$f"
-          done
-          for spec in "crude_12w.png:Crude inventories — 12 weeks" "products_12w.png:Crude + Products — 12 weeks" "gas_12w.png:Gas Storage — 12 weeks" "gas_vs_5y.png:Gas Storage — vs 5-year" "crude_seasonality_5y.png:Crude seasonality"; do
-            file="${spec%%:*}"; caption="${spec#*:}"
-            curl --fail --silent --show-error -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto" -F chat_id="${TELEGRAM_CHAT_ID_ENERGY}" -F caption="$caption" -F photo=@"/tmp/$file"
-          done
-      - uses: actions/upload-artifact@v4
-        if: ${{ github.event.schedule == '0 10 * * Thu' && success() }}
-        with:
-          name: energy-weekly-dashboard
-          path: /tmp/energy_dashboard/
-          if-no-files-found: warn
+        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview != true) }}
+        run: python scripts/run_energy.py
+      - name: Manual preview
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.preview == true }}
+        run: python scripts/run_energy.py --preview
