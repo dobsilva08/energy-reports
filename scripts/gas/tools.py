@@ -67,7 +67,6 @@ def send_to_telegram(text: str, preview: bool = False) -> None:
         payload={"chat_id":chat,"text":chunk,"disable_web_page_preview":True}
         if thread_id: payload["message_thread_id"]=thread_id
         response=requests.post(url,json=payload,timeout=30)
-        response.raise_for_status()
-        data=response.json()
+        if response.status_code >= 400:\n            raise RuntimeError(f\"Telegram HTTP {response.status_code}: {response.text[:1000]}\")\n        data=response.json()
         if not data.get("ok"): raise RuntimeError(f"Telegram API error: {data}")
     print(f"Telegram sent ({len(chunks)} message(s)).")
