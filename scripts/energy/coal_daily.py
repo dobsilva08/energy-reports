@@ -27,7 +27,7 @@ def telegram_send_message(text: str):
         "text": text,
         "parse_mode": "HTML"
     }
-    r = requests.post(url, data=payload)
+    r = requests.post(url, data=payload, timeout=30)\n    r.raise_for_status()
     try:
         data = r.json()
     except:
