@@ -2,6 +2,8 @@ name: Energy Reports — Central Runner
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [simplify-energy-workflow]
   schedule:
     - cron: "0 9 * * *" # Daily 06:00 BRT
     - cron: "0 10 * * Thu" # Weekly EIA 07:00 BRT
