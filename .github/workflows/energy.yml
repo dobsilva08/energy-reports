@@ -1,24 +1,30 @@
-name: Energy Reports — Daily Central Runner
+name: Energy Reports — Daily
+
 on:
   pull_request:
     branches: [main]
   push:
     branches: [simplify-energy-workflow]
   schedule:
-    - cron: "0 9 * * *" # Daily 06:00 BRT
+    - cron: "0 9 * * *" # 06:00 BRT
   workflow_dispatch:
     inputs:
       preview:
-        description: "Preview (test chat where supported; skip direct-send assets)"
+        description: "Run validation only (no Telegram delivery)"
         type: boolean
         default: true
+
 concurrency:
-  group: energy-central-daily
+  group: energy-daily
   cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   reports:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       PIAPI_API_KEY: ${{ secrets.PIAPI_API_KEY }}
       PIAPI_MODEL: gpt-4o-mini
@@ -45,13 +51,12 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Preview validation for pull requests
-        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Static validation (no secrets or Telegram delivery)
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.preview == true) }}
         run: python scripts/run_energy.py --preview
-      - name: Daily assets
-        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview != true) }}
+      - name: Run all daily reports and send to Telegram
+        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview == false) }}
         run: python scripts/run_energy.py
-      - name: Manual preview
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.preview == true }}
-        run: python scripts/run_energy.py --preview
