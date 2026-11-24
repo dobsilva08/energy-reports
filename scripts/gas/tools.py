@@ -1,6 +1,8 @@
 # scripts/gas/tools.py
 import os
-import json\nimport re\nimport html\nimport requests
+import json
+import re
+import html\nimport requests
 from datetime import datetime, timezone, timedelta
 
 try:
