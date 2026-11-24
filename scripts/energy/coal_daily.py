@@ -33,7 +33,14 @@ def telegram_send_message(text: str) -> None:
     url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     for chunk in chunks:
         payload={"chat_id":TELEGRAM_CHAT_ID_ENERGY,"text":chunk,"disable_web_page_preview":True}
-        r=requests.post(url,json=payload,timeout=30);r.raise_for_status()
+        r=requests.post(url,json=payload,timeout=30)
+        data=r.json()
+        if r.status_code >= 400 and data.get("parameters", {}).get("migrate_to_chat_id"):
+            payload["chat_id"]=data["parameters"]["migrate_to_chat_id"]
+            r=requests.post(url,json=payload,timeout=30)
+            data=r.json()
+        if r.status_code >= 400 or not data.get("ok"):
+            raise RuntimeError(f"Telegram API error: {data}")
         data=r.json()
         if not data.get("ok",False): raise RuntimeError(f"Telegram API error: {data}")
     print(f"Telegram sent ({len(chunks)} message(s)).")
