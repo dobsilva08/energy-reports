@@ -29,11 +29,11 @@ def telegram_send_message(text: str) -> None:
         "text": text,
         "parse_mode": "HTML",
     }
-    r = requests.post(url, data=payload)
+    r = requests.post(url, data=payload, timeout=30)\n    r.raise_for_status()
     try:
         data = r.json()
         if not data.get("ok", False):
-            print("Erro ao enviar mensagem ao Telegram:", data)
+            raise RuntimeError(f"Telegram API error: {data}")
     except Exception:
         print("Resposta inesperada do Telegram:", r.text)
 
@@ -255,7 +255,7 @@ def main():
         }
 
         # Salva JSON
-        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
 

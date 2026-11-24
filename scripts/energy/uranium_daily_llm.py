@@ -146,7 +146,7 @@ def main():
         return
 
     numero = title_counter(args.counter_path, key="diario_uranio")
-   titulo = f"⚛️ Urânio U3O8 — Relatório Diário — {today_brt_str()} — Nº {numero}"
+    titulo = f"⚛️ Urânio U3O8 — Relatório Diário — {today_brt_str()} — Nº {numero}"
 
 
     contexto = build_context_block(series_id=args.series_id, start=args.start)

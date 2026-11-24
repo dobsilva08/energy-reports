@@ -1,68 +1,62 @@
-name: Oil — Relatório Diário (PIAPI + Fallback)
+name: Energy Reports — Daily
 
 on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [simplify-energy-workflow]
   schedule:
-    - cron: "0 9 * * *"   # 06:00 BRT
+    - cron: "0 9 * * *" # 06:00 BRT
   workflow_dispatch:
     inputs:
       preview:
+        description: "Run validation only (no Telegram delivery)"
         type: boolean
-        default: false
-        description: "Enviar para TESTE"
+        default: true
 
 concurrency:
-  group: oil-daily
+  group: energy-daily
   cancel-in-progress: false
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       PIAPI_API_KEY: ${{ secrets.PIAPI_API_KEY }}
       PIAPI_MODEL: gpt-4o-mini
-
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GROQ_MODEL: llama-3.1-70b-versatile
-
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: gpt-4o-mini
-
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       DEEPSEEK_MODEL: deepseek-chat
-
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
-
+      NASDAQ_DATA_LINK_API_KEY: ${{ secrets.NASDAQ_DATA_LINK_API_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
       TELEGRAM_CHAT_ID_TEST: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
       TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
-
       LLM_PROVIDER: piapi
       LLM_FALLBACK_ORDER: piapi,groq,openai,deepseek
-
       PYTHONPATH: ${{ github.workspace }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Instalar dependências
+          cache: pip
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Rodar Oil Diário (PREVIEW)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.preview == true }}
-        run: |
-          python scripts/oil/oil_daily.py --preview --send-telegram
-
-      - name: Rodar Oil Diário
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.preview != true }}
-        run: |
-          python scripts/oil/oil_daily.py --send-telegram
+      - name: Static validation (no secrets or Telegram delivery)
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.preview == true) }}
+        run: python scripts/run_energy.py --preview
+      - name: Run all daily reports and send to Telegram
+        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview == false) }}
+        run: python scripts/run_energy.py
