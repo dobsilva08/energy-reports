@@ -15,6 +15,7 @@ from providers.llm_client import LLMClient
 from scripts.oil.fetch_prices import get_wti_price, get_brent_price
 from scripts.oil.tools import (
     sentinel_trigger,
+    mark_sent,
     increment_counter,
     send_telegram,
     today_brt,
@@ -41,10 +42,9 @@ def run_daily(preview=False):
     wti = get_wti_price()
     brent = get_brent_price()
 
-    contexto = f"""
-- WTI: USD {wti:.2f}
-- Brent: USD {brent:.2f}
-"""
+    contexto = f"- WTI: USD {wti:.2f}" if wti is not None else "- WTI: indisponível (API não retornou dado válido)"
+    contexto += f"\n- Brent: USD {brent:.2f}" if brent is not None else "\n- Brent: indisponível (API não retornou dado válido)"
+
 
     # -------------------
     # LLM
@@ -84,6 +84,8 @@ Use os dados:
     print(final)
 
     send_telegram(final, preview=preview)
+    if not preview:
+        mark_sent(sent_path)
 
 
 if __name__ == "__main__":
