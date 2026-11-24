@@ -1,5 +1,7 @@
 name: Energy Reports — Central Runner
 on:
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "0 9 * * *" # Daily 06:00 BRT
     - cron: "0 10 * * Thu" # Weekly EIA 07:00 BRT
@@ -8,7 +10,7 @@ on:
       preview:
         description: "Preview (test chat where supported; skip direct-send assets)"
         type: boolean
-        default: false
+        default: true
       weekly_only:
         description: "Run only weekly EIA inventories"
         type: boolean
@@ -49,13 +51,16 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install
+      - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Preview validation for pull requests
+        if: ${{ github.event_name == 'pull_request' }}
+        run: python scripts/run_energy.py --preview
       - name: Weekly EIA
         if: ${{ github.event.schedule == '0 10 * * Thu' || inputs.weekly_only == true }}
         run: python scripts/run_energy.py --weekly-only ${{ inputs.preview == true && '--preview' || '' }}
       - name: Daily assets
-        if: ${{ github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch' && inputs.weekly_only != true }}
+        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.weekly_only != true) }}
         run: python scripts/run_energy.py ${{ inputs.preview == true && '--preview' || '' }}
       - name: Send weekly inventory messages and charts
         if: ${{ github.event.schedule == '0 10 * * Thu' && success() }}
