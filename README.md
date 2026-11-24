@@ -9,3 +9,5 @@ Relatórios automáticos de Energia — Petróleo (WTI &amp; Brent). Integraçã
 <!-- LIVE_TEST telegram delivery verification -->
 
 <!-- LIVE_TEST migrated Telegram group auto-retry verification -->
+
+<!-- LIVE_TEST Telegram migration retry after helper correction -->
