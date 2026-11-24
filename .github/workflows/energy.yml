@@ -55,7 +55,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Static validation (no secrets or Telegram delivery)
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.preview == true) }}
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.preview == true) }}
         run: python scripts/run_energy.py --preview
       - name: Run all daily reports and send to Telegram
         if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview == false) }}
