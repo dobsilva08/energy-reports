@@ -1,0 +1,65 @@
+name: Energy Reports — Central Runner
+on:
+  schedule:
+    - cron: "0 9 * * *" # Daily 06:00 BRT
+    - cron: "0 10 * * Thu" # Weekly EIA 07:00 BRT
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: "Preview (test chat where supported; skip direct-send assets)"
+        type: boolean
+        default: false
+      weekly_only:
+        description: "Run only weekly EIA inventories"
+        type: boolean
+        default: false
+concurrency:
+  group: energy-central
+  cancel-in-progress: false
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PIAPI_API_KEY: ${{ secrets.PIAPI_API_KEY }}
+      PIAPI_MODEL: gpt-4o-mini
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: llama-3.1-70b-versatile
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: gpt-4o-mini
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_MODEL: deepseek-chat
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      EIA_PETROLEUM_CRUDE_SERIES_ID: ${{ secrets.EIA_PETROLEUM_CRUDE_SERIES_ID }}
+      EIA_PETROLEUM_PRODUCTS_SERIES_ID: ${{ secrets.EIA_PETROLEUM_PRODUCTS_SERIES_ID }}
+      EIA_GAS_STORAGE_SERIES_ID: ${{ secrets.EIA_GAS_STORAGE_SERIES_ID }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+      NASDAQ_DATA_LINK_API_KEY: ${{ secrets.NASDAQ_DATA_LINK_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID_ENERGY: ${{ secrets.TELEGRAM_CHAT_ID_ENERGY }}
+      TELEGRAM_CHAT_ID_TEST: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
+      TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+      LLM_PROVIDER: piapi
+      LLM_FALLBACK_ORDER: piapi,groq,openai,deepseek
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Weekly EIA
+        if: ${{ github.event.schedule == '0 10 * * Thu' || inputs.weekly_only == true }}
+        run: python scripts/run_energy.py --weekly-only ${{ inputs.preview == true && '--preview' || '' }}
+      - name: Daily assets
+        if: ${{ github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch' && inputs.weekly_only != true }}
+        run: python scripts/run_energy.py ${{ inputs.preview == true && '--preview' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event.schedule == '0 10 * * Thu' && success() }}
+        with:
+          name: energy-weekly-dashboard
+          path: /tmp/energy_dashboard/
+          if-no-files-found: warn
