@@ -33,8 +33,11 @@ def sentinel_trigger(path: str) -> bool:
         except:
             pass
 
-    json.dump({"last_sent": tag}, open(path, "w"))
     return False
+
+def mark_sent(path: str):
+    ensure_dir(path)
+    json.dump({"last_sent": today_brt()}, open(path, "w"))
 
 
 def increment_counter(path: str, key: str) -> int:
@@ -61,14 +64,18 @@ def send_telegram(msg: str, preview=False):
     chunks=[]
     while plain:
         if len(plain)<=3900: chunks.append(plain); break
-        cut=plain.rfind("\\n",0,3900)
+        cut=plain.rfind("\n",0,3900)
         if cut<1900: cut=3900
         chunks.append(plain[:cut]); plain=plain[cut:].lstrip()
     url=f"https://api.telegram.org/bot{token}/sendMessage"
     for chunk in chunks:
         payload={"chat_id":chat,"text":chunk,"disable_web_page_preview":True}
         if thread: payload["message_thread_id"]=thread
-        r=requests.post(url,json=payload,timeout=30);r.raise_for_status()
-        data=r.json()
-        if not data.get("ok"): raise RuntimeError(f"Telegram API error: {data}")
+        r=requests.post(url,json=payload,timeout=30); data=r.json()
+        migrated=data.get("parameters",{}).get("migrate_to_chat_id") if isinstance(data,dict) else None
+        if migrated:
+            payload["chat_id"]=migrated
+            r=requests.post(url,json=payload,timeout=30); data=r.json()
+        if r.status_code>=400 or not data.get("ok"):
+            raise RuntimeError(f"Telegram API error: {data}")
     print(f"Telegram sent ({len(chunks)} message(s)).")
