@@ -16,6 +16,9 @@ DAILY = [
     ("JKM LNG", "scripts/gas/jkm_lng_daily.py", ["--out", "pipelines/gas/jkm_lng_daily.json", "--preview"]),
     ("RBOB", "scripts/gas/rbob_daily.py", ["--out", "pipelines/gas/rbob_daily.json", "--preview"]),
 ]
+# These scripts send directly to the production Telegram chat and do not honor
+# preview/test routing. Skip them during preview rather than risk live delivery.
+PREVIEW_SAFE = {"Oil", "Gas", "ULSD", "Jet Fuel", "Uranium"}
 
 def run(name, script, args):
     print(f"\n=== {name} ===", flush=True)
@@ -32,15 +35,21 @@ def run(name, script, args):
 
 def main():
     parser = argparse.ArgumentParser(description="Run daily energy reports")
-    parser.add_argument("--preview", action="store_true", help="Preview/test routing where supported")
+    parser.add_argument("--preview", action="store_true", help="Preview/test routing where supported; skips direct production-send assets")
     args = parser.parse_args()
     failures = []
+    skipped = []
     for name, script, preview_args in DAILY:
+        if args.preview and name not in PREVIEW_SAFE:
+            print(f"SKIP {name}: script lacks safe preview/test-chat routing", flush=True)
+            skipped.append(name)
+            continue
         cmd_args = preview_args if args.preview else [arg for arg in preview_args if arg != "--preview"]
         if not args.preview and name == "Oil":
             cmd_args = []
         failures.append(not run(name, script, cmd_args))
-    print("\nDaily central run: " + ("FAILURES detected" if any(failures) else "all assets completed"), flush=True)
+    print("\nSkipped in preview: " + (", ".join(skipped) if skipped else "none"), flush=True)
+    print("\nDaily central run: " + ("FAILURES detected" if any(failures) else "all executed assets completed"), flush=True)
     sys.exit(1 if any(failures) else 0)
 
 if __name__ == "__main__":
