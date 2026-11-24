@@ -1,6 +1,6 @@
 # scripts/gas/tools.py
 import os
-import json
+import json\nimport re\nimport html\nimport requests
 from datetime import datetime, timezone, timedelta
 
 try:
@@ -43,24 +43,28 @@ def sent_guard(path: str) -> bool:
     return False
 
 def send_to_telegram(text: str, preview: bool = False) -> None:
-    if not requests:
-        print("requests not available; skipping Telegram send.")
-        return
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
     chat_main = os.environ.get('TELEGRAM_CHAT_ID_ENERGY', '').strip()
     chat_test = os.environ.get('TELEGRAM_CHAT_ID_TEST', '').strip()
     thread_id = os.environ.get('TELEGRAM_MESSAGE_THREAD_ID', '').strip()
     chat = chat_test if (preview and chat_test) else chat_main
     if not bot_token or not chat:
-        print("Telegram not configured. Skipping send.")
-        return
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {"chat_id": chat, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
-    if thread_id:
-        payload["message_thread_id"] = thread_id
-    try:
-        r = requests.post(url, json=payload, timeout=30)
-        r.raise_for_status()
-        print("Telegram: mensagem enviada.")
-    except Exception as e:
-        print("Falha no envio ao Telegram:", e)
+        raise RuntimeError("Telegram credentials not configured.")
+    # Plain text avoids malformed HTML from generated reports; chunk at safe limits.
+    plain = html.unescape(re.sub(r"<[^>]+>", "", text)).replace("**", "").replace("__", "")
+    chunks=[]
+    while plain:
+        if len(plain) <= 3900:
+            chunks.append(plain); break
+        cut=plain.rfind("\\n",0,3900)
+        if cut < 1900: cut=3900
+        chunks.append(plain[:cut]); plain=plain[cut:].lstrip()
+    url=f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    for chunk in chunks:
+        payload={"chat_id":chat,"text":chunk,"disable_web_page_preview":True}
+        if thread_id: payload["message_thread_id"]=thread_id
+        response=requests.post(url,json=payload,timeout=30)
+        response.raise_for_status()
+        data=response.json()
+        if not data.get("ok"): raise RuntimeError(f"Telegram API error: {data}")
+    print(f"Telegram sent ({len(chunks)} message(s)).")
