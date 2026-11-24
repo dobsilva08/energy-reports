@@ -3,3 +3,5 @@ Relatórios automáticos de Energia — Petróleo (WTI &amp; Brent). Integraçã
 
 
 <!-- Production delivery validation trigger -->
+
+<!-- LIVE_TEST delivery trigger -->
