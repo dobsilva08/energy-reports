@@ -147,7 +147,6 @@ Não invente níveis de preço nem probabilidades.
 Um parágrafo curto com horizonte curto/médio e grau de confiança baseado nos dados.
 
 ━━━━━━━━━━━━━━━━━━
-⚠️ <i>Relatório automatizado e informativo; não constitui recomendação de investimento.</i>
 Use bullets •, subtítulos com emoji e separadores. Compacto e bem hierarquizado. Dados ausentes explicitamente como N/D. Não use texto genérico para preencher lacunas.
 
 1) Preço spot de Jet Fuel (região benchmark)
@@ -212,7 +211,6 @@ def main():
     texto_final = (
         f"<b>{html.escape(titulo)}</b>\n\n"
         f"{corpo}\n\n"
-        f"<i>Provedor LLM: {html.escape(str(provider_usado))} • {dt:.1f}s</i>"
     )
 
     print(texto_final)
