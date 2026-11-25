@@ -89,7 +89,6 @@ Fatores macro e riscos relevantes, sem alegações factuais recentes não suport
 Perspectiva curto/médio prazo e grau de confiança explicado.
 
 ━━━━━━━━━━━━━━━━━━
-⚠️ <i>Relatório automatizado e informativo; não constitui recomendação de investimento.</i>
 Contexto factual:
 {context}
 Conteúdo específico a cobrir: RBOB gasoline futures, crack spread, crude oil, refining, inventories, demand, seasonal drivers, gasoline supply
@@ -98,7 +97,7 @@ Conteúdo específico a cobrir: RBOB gasoline futures, crack spread, crude oil, 
     t0=time.time(); body=llm.generate(system_prompt=system,user_prompt=prompt,temperature=0.35,max_tokens=1700); dt=time.time()-t0
     num=title_counter(args.counter_path,key=KEY)
     title=f"{EMOJI} {ASSET} — Relatório Diário — {today()} — Nº {num}"
-    final=f"<b>{html.escape(title)}</b>\n\n{body.strip()}\n\n<i>LLM: {html.escape(str(llm.active_provider))} · {dt:.1f}s</i>"
+    final=f"<b>{html.escape(title)}</b>\n\n{body.strip()}"
     print(final,flush=True)
     send_to_telegram(final,preview=args.preview)
     if not args.preview:
