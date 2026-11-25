@@ -107,8 +107,48 @@ def gerar_analise_jet_fuel(contexto_textual: str, provider_hint: Optional[str] =
     )
 
     user_msg = f"""
-Gere um **Relatório Diário — Jet Fuel (Kerosene de Aviação)** estruturado nos **10 tópicos abaixo**.\n\nPADRÃO VISUAL OBRIGATÓRIO ENERGY REPORTS:\n- Formate o texto para Telegram em estilo consistente com relatórios profissionais de commodities/on-chain/metais.\n- Use títulos de seção curtos com emoji e caixa alta, separadores simples (━━━━━━━━━━━━), bullets • e destaque somente números/termos-chave.\n- Organize: PRICE ACTION / DADOS; FUNDAMENTOS; OFERTA & DEMANDA ou estoques (quando pertinente); MACRO / GEOPOLÍTICA / RISCOS; INTERPRETAÇÃO EXECUTIVA; CENÁRIOS (curto e médio prazo); CONCLUSÃO. Adapte os subtítulos ao ativo e aos 10 tópicos solicitados sem inventar dados.\n- A seção INTERPRETAÇÃO EXECUTIVA deve ter 3 a 5 bullets objetivos e declarar viés (altista/baixista/neutro), momentum e principais catalisadores/riscos, apenas se sustentados pelo contexto.\n- Separe fatos fornecidos no contexto de inferências; sinalize dados indisponíveis e não invente cotações, pesquisas, notícias ou números.\n- Texto conciso, legível no Telegram, PT-BR, sem markdown de tabela, sem bloco de código e sem tags HTML (o wrapper já aplica HTML ao título).\n- Finalize com: “⚠️ Relatório informativo; não constitui recomendação de investimento.”\n
-Seja específico e conciso. Numere exatamente de 1 a 10.
+Gere um **Relatório Diário — Jet Fuel (Kerosene de Aviação)** estruturado nos **10 tópicos abaixo**.\n\nPADRÃO EDITORIAL E VISUAL ENERGY REPORTS (OBRIGATÓRIO — NÃO OMITIR):
+Produza um relatório com visual de boletim profissional de mercado, não um texto corrido. Use HTML compatível com Telegram (somente <b>, <i>, <code>), sem Markdown.
+Formato fixo:
+🟠 <b>ENERGY REPORTS | [ATIVO]</b>
+📅 Data e período
+
+━━━━━━━━━━━━━━━━━━
+⚡ <b>PAINEL DE MERCADO</b>
+• preço/benchmark e unidade
+• variação e direção, somente se houver dado
+• 2–4 indicadores-chave (N/D quando indisponíveis)
+
+━━━━━━━━━━━━━━━━━━
+🧭 <b>LEITURA EXECUTIVA</b>
+• 3 bullets curtos: viés, momentum, catalisador/riscos, sem extrapolar
+
+━━━━━━━━━━━━━━━━━━
+📊 <b>FUNDAMENTOS</b>
+• Oferta, demanda, estoques, produção, curva/spreads, conforme aplicável
+
+━━━━━━━━━━━━━━━━━━
+🌐 <b>MACRO & GEOPOLÍTICA</b>
+• fatores macro, clima, logística, política ou risco relevantes
+
+━━━━━━━━━━━━━━━━━━
+🔎 <b>O QUE MONITORAR</b>
+• 3 próximos indicadores/eventos, sem inventar datas
+
+━━━━━━━━━━━━━━━━━━
+🎯 <b>CENÁRIOS</b>
+🟢 Altista: condição que sustentaria
+🟡 Base: cenário neutro / continuidade
+🔴 Baixista: condição que pressionaria
+Não invente níveis de preço nem probabilidades.
+
+━━━━━━━━━━━━━━━━━━
+📝 <b>CONCLUSÃO</b>
+Um parágrafo curto com horizonte curto/médio e grau de confiança baseado nos dados.
+
+━━━━━━━━━━━━━━━━━━
+⚠️ <i>Relatório automatizado e informativo; não constitui recomendação de investimento.</i>
+Use bullets •, subtítulos com emoji e separadores. Compacto e bem hierarquizado. Dados ausentes explicitamente como N/D. Não use texto genérico para preencher lacunas.
 
 1) Preço spot de Jet Fuel (região benchmark)
 2) Curva de futuros e spreads (Jet vs Brent/WTI, jet crack spread)
