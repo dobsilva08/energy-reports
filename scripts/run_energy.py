@@ -13,9 +13,9 @@ ASSETS = [
     ("ULSD", "scripts/gas/ulsd_daily_llm.py", ["--send-telegram"]),
     ("Jet Fuel", "scripts/gas/jet_fuel_daily_llm.py", ["--send-telegram"]),
     ("Uranium", "scripts/energy/uranium_daily_llm.py", ["--send-telegram"]),
-    ("Coal", "scripts/energy/coal_daily.py", ["--out", "pipelines/energy/coal_daily.json"]),
-    ("JKM LNG", "scripts/gas/jkm_lng_daily.py", ["--out", "pipelines/gas/jkm_lng_daily.json"]),
-    ("RBOB", "scripts/gas/rbob_daily.py", ["--out", "pipelines/gas/rbob_daily.json"]),
+    ("Coal", "scripts/energy/coal_daily.py", []),
+    ("JKM LNG", "scripts/gas/jkm_lng_daily.py", []),
+    ("RBOB", "scripts/gas/rbob_daily.py", []),
 ]
 
 def validate():
