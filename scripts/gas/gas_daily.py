@@ -91,7 +91,6 @@ Não invente níveis de preço nem probabilidades.
 Um parágrafo curto com horizonte curto/médio e grau de confiança baseado nos dados.
 
 ━━━━━━━━━━━━━━━━━━
-⚠️ <i>Relatório automatizado e informativo; não constitui recomendação de investimento.</i>
 Use bullets •, subtítulos com emoji e separadores. Compacto e bem hierarquizado. Dados ausentes explicitamente como N/D. Não use texto genérico para preencher lacunas.
 
 1) Preço spot (Henry Hub)
@@ -140,7 +139,7 @@ def main():
 
     corpo = llm_out["texto"].strip()
     provider_usado = llm_out.get("provider", "?")
-    texto_final = f"<b>{html.escape(titulo)}</b>\n\n{corpo}\n\n<i>Provedor LLM: {html.escape(str(provider_usado))} • {dt:.1f}s</i>"
+    texto_final = f"<b>{html.escape(titulo)}</b>\n\n{corpo}"
     print(texto_final)
 
     if args.send_telegram:
