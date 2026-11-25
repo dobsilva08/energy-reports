@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 ROOT=os.path.abspath(os.path.join(os.path.dirname(__file__),"..",".."))
 if ROOT not in sys.path: sys.path.insert(0,ROOT)
 from providers.llm_client import LLMClient
-from scripts.gas.tools import title_counter, sent_guard, send_to_telegram
+from scripts.gas.tools import title_counter, send_to_telegram
 BRT=timezone(timedelta(hours=-3))
 TICKER="RB=F"
 KEY="daily_rbob"
@@ -45,8 +45,13 @@ def main():
     p.add_argument("--provider",default=None)
     args=p.parse_args()
     sent_path=args.sent_path or f"data/sentinels/{KEY}.sent"
-    if not args.force and sent_guard(sent_path):
-        print("Já enviado hoje (trava diária). Use --force para ignorar."); return
+    today_tag=datetime.now(BRT).strftime("%Y-%m-%d")
+    if not args.force and os.path.exists(sent_path):
+        try:
+            import json
+            if json.load(open(sent_path,encoding="utf-8")).get("last_sent")==today_tag:
+                print("Já enviado hoje (trava diária). Use --force para ignorar."); return
+        except Exception: pass
     q=quote()
     context=f"Ativo: {ASSET}\nTicker: {TICKER}\nÚltimo valor: {q['last']} {UNIT}\nVariação diária: {q['change']}\nData da cotação: {q['date']}\nFonte: Yahoo Finance chart endpoint. Dados indisponíveis devem ser indicados como N/D.\n"
     system="Você é analista sênior de mercados de energia. Escreva em português brasileiro, conciso, sem inventar dados, eventos, preços, datas, probabilidades ou citações. Use N/D para informação não comprovada."
@@ -95,6 +100,6 @@ Conteúdo específico a cobrir: RBOB gasoline futures, crack spread, crude oil, 
     title=f"{EMOJI} {ASSET} — Relatório Diário — {today()} — Nº {num}"
     final=f"<b>{html.escape(title)}</b>\n\n{body.strip()}\n\n<i>LLM: {html.escape(str(llm.active_provider))} · {dt:.1f}s</i>"
     print(final,flush=True)
-    send_to_telegram(final,preview=args.preview)
+    send_to_telegram(final,preview=args.preview)\n    if not args.preview:\n        os.makedirs(os.path.dirname(sent_path) or '.',exist_ok=True)\n        import json\n        json.dump({'last_sent':today_tag},open(sent_path,'w',encoding='utf-8'))
 
 if __name__=="__main__": main()
