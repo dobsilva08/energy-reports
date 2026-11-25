@@ -1,47 +1,100 @@
-import os
-import json
-import argparse
-import requests
-from datetime import datetime, timedelta
-import time
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Daily Carvão — Newcastle/benchmark market report — ENERGY REPORTS visual standard."""
+import os, sys, argparse, html, time, requests
+from datetime import datetime, timezone, timedelta
+ROOT=os.path.abspath(os.path.join(os.path.dirname(__file__),"..",".."))
+if ROOT not in sys.path: sys.path.insert(0,ROOT)
+from providers.llm_client import LLMClient
+from scripts.gas.tools import title_counter, sent_guard, send_to_telegram
+BRT=timezone(timedelta(hours=-3))
+TICKER="MTF=F"
+KEY="daily_coal"
+EMOJI="🪨"
+ASSET="Carvão — Newcastle/benchmark"
+UNIT="USD"
 
-# ------------------------------------------------------------------
-# Variáveis de ambiente (vindas do GitHub Actions)
-# ------------------------------------------------------------------
-FRED_API_KEY = os.getenv("FRED_API_KEY")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID_ENERGY = os.getenv("TELEGRAM_CHAT_ID_ENERGY")
+def today():
+    return datetime.now(BRT).strftime("%d/%m/%Y")
 
-if FRED_API_KEY is None:
-    raise RuntimeError("FRED_API_KEY não encontrado nas variáveis de ambiente.")
-if TELEGRAM_BOT_TOKEN is None or TELEGRAM_CHAT_ID_ENERGY is None:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID_ENERGY não configurados.")
+def quote():
+    """Retrieve daily Yahoo Finance chart data; fail gracefully and label unavailable."""
+    try:
+        url=f"https://query1.finance.yahoo.com/v8/finance/chart/{TICKER}?range=1mo&interval=1d"
+        r=requests.get(url,headers={"User-Agent":"Mozilla/5.0"},timeout=20); r.raise_for_status()
+        j=r.json()["chart"]["result"][0]
+        q=j["indicators"]["quote"][0]
+        closes=[v for v in (q.get("close") or []) if v is not None]
+        timestamps=j.get("timestamp") or []
+        if not closes: return {"last":"N/D","change":"N/D","date":"N/D","ticker":TICKER}
+        last=closes[-1]; prev=closes[-2] if len(closes)>1 else None
+        chg=((last-prev)/prev*100) if prev else None
+        stamp=timestamps[-1] if timestamps else None
+        date=datetime.fromtimestamp(stamp,timezone.utc).strftime("%d/%m/%Y") if stamp else "N/D"
+        return {"last":f"{last:.4f}","change":f"{chg:+.2f}%" if chg is not None else "N/D","date":date,"ticker":TICKER}
+    except Exception as e:
+        print(f"Quote fetch failed: {e}",flush=True)
+        return {"last":"N/D","change":"N/D","date":"N/D","ticker":TICKER}
 
-# ------------------------------------------------------------------
-# Telegram (HTML seguro)
-# ------------------------------------------------------------------
-def telegram_send_message(text: str) -> None:
-    # Plain text, split into safe chunks to prevent HTML parsing/length HTTP 400.
-    plain = html.unescape(re.sub(r"<[^>]+>", "", text)).replace("**", "").replace("__", "")
-    chunks=[]
-    while plain:
-        if len(plain)<=3900:
-            chunks.append(plain); break
-        cut=plain.rfind("\\n",0,3900)
-        if cut<1900: cut=3900
-        chunks.append(plain[:cut]); plain=plain[cut:].lstrip()
-    url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    for chunk in chunks:
-        payload={"chat_id":TELEGRAM_CHAT_ID_ENERGY,"text":chunk,"disable_web_page_preview":True}
-        r=requests.post(url,json=payload,timeout=30)
-        data=r.json()
-        if r.status_code >= 400 and data.get("parameters", {}).get("migrate_to_chat_id"):
-            payload["chat_id"]=data["parameters"]["migrate_to_chat_id"]
-            r=requests.post(url,json=payload,timeout=30)
-            data=r.json()
-        if r.status_code >= 400 or not data.get("ok"):
-            raise RuntimeError(f"Telegram API error: {data}")
-        data=r.json()
-        if not data.get("ok",False): raise RuntimeError(f"Telegram API error: {data}")
-    print(f"Telegram sent ({len(chunks)} message(s)).")
+def main():
+    p=argparse.ArgumentParser()
+    p.add_argument("--preview",action="store_true")
+    p.add_argument("--force",action="store_true")
+    p.add_argument("--counter-path",default="data/counters.json")
+    p.add_argument("--sent-path",default=None)
+    p.add_argument("--provider",default=None)
+    args=p.parse_args()
+    sent_path=args.sent_path or f"data/sentinels/{KEY}.sent"
+    if not args.force and sent_guard(sent_path):
+        print("Já enviado hoje (trava diária). Use --force para ignorar."); return
+    q=quote()
+    context=f"Ativo: {ASSET}\nTicker: {TICKER}\nÚltimo valor: {q['last']} {UNIT}\nVariação diária: {q['change']}\nData da cotação: {q['date']}\nFonte: Yahoo Finance chart endpoint. Dados indisponíveis devem ser indicados como N/D.\n"
+    system="Você é analista sênior de mercados de energia. Escreva em português brasileiro, conciso, sem inventar dados, eventos, preços, datas, probabilidades ou citações. Use N/D para informação não comprovada."
+    prompt=f"""Produza relatório diário de {ASSET} no padrão visual ENERGY REPORTS, somente HTML compatível Telegram (<b>, <i>), sem markdown.
+{EMOJI} <b>ENERGY REPORTS | {ASSET.upper()}</b>
+📅 {today()} | Diário
 
+━━━━━━━━━━━━━━━━━━
+⚡ <b>PAINEL DE MERCADO</b>
+• preço, unidade, variação, data da cotação
+• indicadores disponíveis; indisponíveis como N/D
+
+━━━━━━━━━━━━━━━━━━
+🧭 <b>LEITURA EXECUTIVA</b>
+3 bullets de viés, momentum e riscos, estritamente baseados em contexto.
+
+━━━━━━━━━━━━━━━━━━
+📊 <b>FUNDAMENTOS</b>
+Oferta, demanda, estoques, curva, spreads e dados específicos do ativo. Diferencie dados e interpretação; não afirme informações não fornecidas.
+
+━━━━━━━━━━━━━━━━━━
+🌐 <b>MACRO & GEOPOLÍTICA</b>
+Fatores macro e riscos relevantes, sem alegações factuais recentes não suportadas.
+
+━━━━━━━━━━━━━━━━━━
+🔎 <b>O QUE MONITORAR</b>
+3 indicadores/eventos.
+
+━━━━━━━━━━━━━━━━━━
+🎯 <b>CENÁRIOS</b>
+🟢 Altista | 🟡 Base | 🔴 Baixista — condições, não preços/probabilidades inventados.
+
+━━━━━━━━━━━━━━━━━━
+📝 <b>CONCLUSÃO</b>
+Perspectiva curto/médio prazo e grau de confiança explicado.
+
+━━━━━━━━━━━━━━━━━━
+⚠️ <i>Relatório automatizado e informativo; não constitui recomendação de investimento.</i>
+Contexto factual:
+{context}
+Conteúdo específico a cobrir: preços e benchmark carvão, disponibilidade dos dados, energia substituta, oferta/demanda, logística, política energética, gás e geração elétrica
+"""
+    llm=LLMClient(provider=args.provider or None)
+    t0=time.time(); body=llm.generate(system_prompt=system,user_prompt=prompt,temperature=0.35,max_tokens=1700); dt=time.time()-t0
+    num=title_counter(args.counter_path,key=KEY)
+    title=f"{EMOJI} {ASSET} — Relatório Diário — {today()} — Nº {num}"
+    final=f"<b>{html.escape(title)}</b>\n\n{body.strip()}\n\n<i>LLM: {html.escape(str(llm.active_provider))} · {dt:.1f}s</i>"
+    print(final,flush=True)
+    send_to_telegram(final,preview=args.preview)
+
+if __name__=="__main__": main()
