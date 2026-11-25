@@ -95,7 +95,6 @@ Não invente níveis de preço nem probabilidades.
 Um parágrafo curto com horizonte curto/médio e grau de confiança baseado nos dados.
 
 ━━━━━━━━━━━━━━━━━━
-⚠️ <i>Relatório automatizado e informativo; não constitui recomendação de investimento.</i>
 Use bullets •, subtítulos com emoji e separadores. Compacto e bem hierarquizado. Dados ausentes explicitamente como N/D. Não use texto genérico para preencher lacunas.
 
 1) Preços WTI e Brent
@@ -121,7 +120,7 @@ Use os dados:
     num = increment_counter("data/counters.json", "oil_daily")
     titulo = f"🛢️ Petróleo — Relatório Diário (Brent & WTI) — {today_brt()} — Diário — Nº {num}"
 
-    final = f"<b>{html.escape(titulo)}</b>\n\n{texto}\n\n<i>LLM: {llm.active_provider} · {dt:.1f}s</i>"
+    final = f"<b>{html.escape(titulo)}</b>\n\n{texto}"
     print(final)
 
     send_telegram(final, preview=preview)
