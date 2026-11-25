@@ -45,6 +45,27 @@ def sent_guard(path: str) -> bool:
     json.dump({'last_sent': today_tag}, open(path, 'w', encoding='utf-8'))
     return False
 
+def normalize_telegram_html(text: str) -> str:
+    """Normalize common LLM HTML wrappers to Telegram-supported HTML."""
+    text = re.sub(r"(?is)<!doctype[^>]*>", "", text)
+    # Telegram HTML does not support <br>; convert it to real line breaks.
+    text = re.sub(r"(?i)<\\s*br\\s*/?\\s*>", "\\n", text)
+    # LLMs sometimes wrap a report in full-document tags.
+    text = re.sub(r"(?i)<\\s*/?\\s*(html|body)\\s*>", "", text)
+    # Keep only Telegram's supported formatting tags. Unsupported wrappers
+    # (e.g. <div>, <p>, <br>) are removed, but their text is preserved.
+    allowed = {"b", "strong", "i", "em", "u", "ins", "s", "strike", "del", "code", "pre", "blockquote", "tg-spoiler"}
+    def clean_tag(match):
+        tag = match.group(0)
+        name = re.match(r"<\\s*/?\\s*([a-zA-Z0-9-]+)", tag)
+        if not name:
+            return tag
+        tag_name = name.group(1).lower()
+        return tag if tag_name in allowed else ""
+    text = re.sub(r"<[^>]+>", clean_tag, text)
+    return text.strip()
+
+
 def send_to_telegram(text: str, preview: bool = False) -> None:
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
     chat_main = os.environ.get('TELEGRAM_CHAT_ID_ENERGY', '').strip()
@@ -54,8 +75,8 @@ def send_to_telegram(text: str, preview: bool = False) -> None:
     if not bot_token or not chat:
         raise RuntimeError("Telegram credentials not configured.")
 
-    # Preserve report markup (HTML) so messages have the same visual hierarchy
-    # as the On-Chain and Metals Telegram reports. Keep message size conservative.
+    # Normalize LLM-generated wrappers/tags before Telegram HTML delivery.
+    text = normalize_telegram_html(text)
     if len(text) > 4000:
         raise RuntimeError(f"Telegram HTML report too long ({len(text)} chars); chunking required.")
     payload={"chat_id":chat,"text":text,"parse_mode":"HTML","disable_web_page_preview":True}
@@ -69,4 +90,4 @@ def send_to_telegram(text: str, preview: bool = False) -> None:
         data=response.json()
     if response.status_code >= 400 or not data.get("ok"):
         raise RuntimeError(f"Telegram API error: {data}")
-    print("Telegram sent (HTML formatting preserved).")
+    print("Telegram sent (HTML formatting preserved and normalized).")
