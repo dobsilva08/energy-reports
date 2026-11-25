@@ -53,26 +53,20 @@ def send_to_telegram(text: str, preview: bool = False) -> None:
     chat = chat_test if (preview and chat_test) else chat_main
     if not bot_token or not chat:
         raise RuntimeError("Telegram credentials not configured.")
-    # Plain text avoids malformed HTML from generated reports; chunk at safe limits.
-    plain = html.unescape(re.sub(r"<[^>]+>", "", text)).replace("**", "").replace("__", "")
-    chunks=[]
-    while plain:
-        if len(plain) <= 3900:
-            chunks.append(plain); break
-        cut=plain.rfind("\\n",0,3900)
-        if cut < 1900: cut=3900
-        chunks.append(plain[:cut]); plain=plain[cut:].lstrip()
-    url=f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    for chunk in chunks:
-        payload={"chat_id":chat,"text":chunk,"disable_web_page_preview":True}
-        if thread_id: payload["message_thread_id"]=thread_id
-        response=requests.post(url,json=payload,timeout=30)
+
+    # Preserve report markup (HTML) so messages have the same visual hierarchy
+    # as the On-Chain and Metals Telegram reports. Keep message size conservative.
+    if len(text) > 4000:
+        raise RuntimeError(f"Telegram HTML report too long ({len(text)} chars); chunking required.")
+    payload={"chat_id":chat,"text":text,"parse_mode":"HTML","disable_web_page_preview":True}
+    if thread_id: payload["message_thread_id"]=thread_id
+    response=requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage",json=payload,timeout=30)
+    data=response.json()
+    migrated_id=data.get("parameters", {}).get("migrate_to_chat_id") if isinstance(data,dict) else None
+    if migrated_id:
+        payload["chat_id"]=migrated_id
+        response=requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage",json=payload,timeout=30)
         data=response.json()
-        migrated_id=data.get("parameters", {}).get("migrate_to_chat_id") if isinstance(data,dict) else None
-        if migrated_id:
-            payload["chat_id"]=migrated_id
-            response=requests.post(url,json=payload,timeout=30)
-            data=response.json()
-        if response.status_code >= 400 or not data.get("ok"):
-            raise RuntimeError(f"Telegram API error: {data}")
-    print(f"Telegram sent ({len(chunks)} message(s)).")
+    if response.status_code >= 400 or not data.get("ok"):
+        raise RuntimeError(f"Telegram API error: {data}")
+    print("Telegram sent (HTML formatting preserved).")
