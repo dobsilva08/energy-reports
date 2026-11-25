@@ -106,7 +106,7 @@ def gerar_analise_ulsd(contexto_textual: str, provider_hint: Optional[str] = Non
     )
 
     user_msg = f"""
-Gere um **Relatório Diário — ULSD / Heating Oil** estruturado nos **10 tópicos abaixo**.
+Gere um **Relatório Diário — ULSD / Heating Oil** estruturado nos **10 tópicos abaixo**.\n\nPADRÃO VISUAL OBRIGATÓRIO ENERGY REPORTS:\n- Formate o texto para Telegram em estilo consistente com relatórios profissionais de commodities/on-chain/metais.\n- Use títulos de seção curtos com emoji e caixa alta, separadores simples (━━━━━━━━━━━━), bullets • e destaque somente números/termos-chave.\n- Organize: PRICE ACTION / DADOS; FUNDAMENTOS; OFERTA & DEMANDA ou estoques (quando pertinente); MACRO / GEOPOLÍTICA / RISCOS; INTERPRETAÇÃO EXECUTIVA; CENÁRIOS (curto e médio prazo); CONCLUSÃO. Adapte os subtítulos ao ativo e aos 10 tópicos solicitados sem inventar dados.\n- A seção INTERPRETAÇÃO EXECUTIVA deve ter 3 a 5 bullets objetivos e declarar viés (altista/baixista/neutro), momentum e principais catalisadores/riscos, apenas se sustentados pelo contexto.\n- Separe fatos fornecidos no contexto de inferências; sinalize dados indisponíveis e não invente cotações, pesquisas, notícias ou números.\n- Texto conciso, legível no Telegram, PT-BR, sem markdown de tabela, sem bloco de código e sem tags HTML (o wrapper já aplica HTML ao título).\n- Finalize com: “⚠️ Relatório informativo; não constitui recomendação de investimento.”\n
 Seja específico e conciso. Numere exatamente de 1 a 10.
 
 1) Preço spot ULSD / Heating Oil
