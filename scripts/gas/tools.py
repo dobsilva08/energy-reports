@@ -49,15 +49,15 @@ def normalize_telegram_html(text: str) -> str:
     """Normalize common LLM HTML wrappers to Telegram-supported HTML."""
     text = re.sub(r"(?is)<!doctype[^>]*>", "", text)
     # Telegram HTML does not support <br>; convert it to real line breaks.
-    text = re.sub(r"(?i)<\\s*br\\s*/?\\s*>", "\\n", text)
+    text = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", text)
     # LLMs sometimes wrap a report in full-document tags.
-    text = re.sub(r"(?i)<\\s*/?\\s*(html|body)\\s*>", "", text)
+    text = re.sub(r"(?i)<\s*/?\s*(html|body)\s*>", "", text)
     # Keep only Telegram's supported formatting tags. Unsupported wrappers
-    # (e.g. <div>, <p>, <br>) are removed, but their text is preserved.
+    # are removed, but their text is preserved.
     allowed = {"b", "strong", "i", "em", "u", "ins", "s", "strike", "del", "code", "pre", "blockquote", "tg-spoiler"}
     def clean_tag(match):
         tag = match.group(0)
-        name = re.match(r"<\\s*/?\\s*([a-zA-Z0-9-]+)", tag)
+        name = re.match(r"<\s*/?\s*([a-zA-Z0-9-]+)", tag)
         if not name:
             return tag
         tag_name = name.group(1).lower()
