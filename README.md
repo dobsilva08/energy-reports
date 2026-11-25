@@ -13,3 +13,6 @@ Relatórios automáticos de Energia — Petróleo (WTI &amp; Brent). Integraçã
 <!-- LIVE_TEST Telegram migration retry after helper correction -->
 
 <!-- LIVE_TEST definitive oil API and Telegram migration regression test -->
+
+
+<!-- LIVE_TEST trigger: validate daily Energy reports and Telegram delivery -->
