@@ -100,6 +100,11 @@ Conteúdo específico a cobrir: preços e benchmark carvão, disponibilidade dos
     title=f"{EMOJI} {ASSET} — Relatório Diário — {today()} — Nº {num}"
     final=f"<b>{html.escape(title)}</b>\n\n{body.strip()}\n\n<i>LLM: {html.escape(str(llm.active_provider))} · {dt:.1f}s</i>"
     print(final,flush=True)
-    send_to_telegram(final,preview=args.preview)\n    if not args.preview:\n        os.makedirs(os.path.dirname(sent_path) or '.',exist_ok=True)\n        import json\n        json.dump({'last_sent':today_tag},open(sent_path,'w',encoding='utf-8'))
+    send_to_telegram(final,preview=args.preview)
+    if not args.preview:
+        os.makedirs(os.path.dirname(sent_path) or '.',exist_ok=True)
+        import json
+        with open(sent_path,'w',encoding='utf-8') as fh:
+            json.dump({'last_sent':today_tag},fh)
 
 if __name__=="__main__": main()
