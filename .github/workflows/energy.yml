@@ -6,11 +6,11 @@ on:
   push:
     branches: [main, simplify-energy-workflow]
   schedule:
-    - cron: "0 9 * * *" # 06:00 BRT
+    - cron: "2 9 * * *" # 06:02 BRT — staggered, off the hour
   workflow_dispatch:
     inputs:
       preview:
-        description: "Run validation only (no Telegram delivery)"
+        description: "Run validation only (no secrets or Telegram delivery)"
         type: boolean
         default: true
 
@@ -58,5 +58,5 @@ jobs:
         if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.preview == true) }}
         run: python scripts/run_energy.py --preview
       - name: Run all daily reports and send to Telegram
-        if: ${{ github.event.schedule == '0 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview == false) || (github.event_name == 'push' && contains(github.event.head_commit.message, 'LIVE_TEST')) }}
+        if: ${{ github.event.schedule == '2 9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.preview == false) || (github.event_name == 'push' && contains(github.event.head_commit.message, 'LIVE_TEST')) }}
         run: python scripts/run_energy.py
