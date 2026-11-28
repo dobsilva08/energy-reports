@@ -12,7 +12,7 @@ on:
       preview:
         description: "Run validation only (no secrets or Telegram delivery)"
         type: boolean
-        default: true
+        default: false
 
 concurrency:
   group: energy-daily
