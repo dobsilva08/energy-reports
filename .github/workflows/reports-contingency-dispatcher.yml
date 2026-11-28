@@ -1,0 +1,75 @@
+name: Reports Contingency Dispatcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Dispatch reports even if a recent scheduled run exists (use cautiously)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: reports-contingency-dispatch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate dispatch token
+        env:
+          REPORTS_DISPATCH_TOKEN: ${{ secrets.REPORTS_DISPATCH_TOKEN }}
+        run: |
+          test -n "$REPORTS_DISPATCH_TOKEN" || { echo "::error::Missing REPORTS_DISPATCH_TOKEN"; exit 1; }
+
+      - name: Dispatch missing reports safely
+        env:
+          GH_TOKEN: ${{ secrets.REPORTS_DISPATCH_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, json, urllib.request, urllib.error, datetime, time
+
+          token=os.environ["GH_TOKEN"]
+          force=os.environ.get("FORCE","false").lower()=="true"
+          repos=[
+            ("energy-reports","energy.yml"),
+            ("metals-reports","run-metals.yml"),
+            ("onchain-telegram-reporter","run-onchain.yml"),
+            ("bonds-reports","bonds_unified.yml"),
+          ]
+          now=datetime.datetime.now(datetime.timezone.utc)
+          window=datetime.timedelta(hours=2)
+          headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}
+          def get(url):
+            req=urllib.request.Request(url,headers=headers)
+            with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+          def post(url):
+            req=urllib.request.Request(url,data=b"{}",headers={**headers,"Content-Type":"application/json"},method="POST")
+            with urllib.request.urlopen(req,timeout=20) as r:return r.status
+          for repo,workflow in repos:
+            base=f"https://api.github.com/repos/dobsilva08/{repo}"
+            runs=get(base+f"/actions/workflows/{workflow}/runs?per_page=10")
+            recent=[]
+            for run in runs.get("workflow_runs",[]):
+              created=run.get("created_at")
+              event=run.get("event")
+              if created and event=="schedule":
+                dt=datetime.datetime.fromisoformat(created.replace("Z","+00:00"))
+                if now-dt <= window: recent.append(run)
+            if recent and not force:
+              print(f"SKIP {repo}: scheduled run in last 2h ({recent[0].get('status')}/{recent[0].get('conclusion')})")
+              continue
+            endpoint=base+f"/actions/workflows/{workflow}/dispatches"
+            payload={"ref":"main"}
+            req=urllib.request.Request(endpoint,data=json.dumps(payload).encode(),headers={**headers,"Content-Type":"application/json"},method="POST")
+            try:
+              with urllib.request.urlopen(req,timeout=20) as r: print(f"DISPATCH {repo}: HTTP {r.status}")
+            except urllib.error.HTTPError as e:
+              raise RuntimeError(f"Dispatch failed for {repo}: HTTP {e.code} {e.read().decode(errors='replace')}") from e
+          PY
