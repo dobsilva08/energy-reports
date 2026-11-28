@@ -63,8 +63,10 @@ jobs:
                 dt=datetime.datetime.fromisoformat(created.replace("Z","+00:00"))
                 if now-dt <= window: recent.append(run)
             if recent and not force:
-              print(f"SKIP {repo}: scheduled run in last 2h ({recent[0].get('status')}/{recent[0].get('conclusion')})")
-              continue
+              safe=any(run.get("status")=="in_progress" or run.get("conclusion")=="success" for run in recent)
+              if safe:
+                print(f"SKIP {repo}: recent run is active or successful")
+                continue
             endpoint=base+f"/actions/workflows/{workflow}/dispatches"
             payload={"ref":"main"}
             req=urllib.request.Request(endpoint,data=json.dumps(payload).encode(),headers={**headers,"Content-Type":"application/json"},method="POST")
